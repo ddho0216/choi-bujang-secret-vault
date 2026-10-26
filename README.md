@@ -14,6 +14,7 @@
 - `/`: 화면이 `/api/notes`를 불러 가상 메모 네 건을 카드로 보여 줍니다.
 - `api/notes.js`: Vercel 서버 함수. 환경변수 `SUPABASE_URL`, `SUPABASE_SECRET_KEY`로 Supabase `notes` 표를 읽어 `{ notes: [{ title, content }] }`만 돌려줍니다. 키는 응답·로그에 쓰지 않습니다.
 - `supabase/notes.sql`: 표 생성(`owner_id uuid`, `auth.users` 외래키 없음), RLS 켜기, `anon`·`authenticated` 권한 회수, 가상 메모 네 건 입력, 확인용 조회. 메모 문장이 들어 있어 `.gitignore`로 Git에서 뺐습니다. 이 컴퓨터에만 있습니다.
+- `vercel.json`의 `headers`로 모든 응답에 `X-Content-Type-Options: nosniff`를 붙입니다. 확인: `curl -sI https://choi-bujang-secret-vault-hailey17.vercel.app/ | grep -i x-content-type-options`
 - 공개 `/data.json`과 저장소의 `data.json`은 없앴습니다. 빌드(`npm run build`)는 `public/aleph.json`(저장소·커밋·배포 주소)만 만듭니다.
 
 ## 다시 실행하는 방법
