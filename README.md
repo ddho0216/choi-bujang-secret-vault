@@ -10,7 +10,7 @@
 | 2 | 메모를 코드 밖(Supabase 표)으로 옮기고 `api/notes.js`를 통해 읽음. 보안 헤더(`nosniff`) 추가 | 완료·배포 확인(`b823ec1`, `4678663`) |
 | 3 | Supabase Auth 이메일·비밀번호 로그인·로그아웃 화면, 로그인한 사용자의 메모 추가·수정·삭제 화면과 서버 API(서버가 토큰 검증), `aleph.config.json`에 `identityProvider`·`allowedRoutes` | 배포 완료(`7b9e987`). 로그인해 추가한 메모가 A의 `owner_id`로 저장된 것은 DB 조회로 확인 |
 
-| 4 | 서버 API의 소유자 검사: 검증한 사용자 ID와 메모의 `owner_id`를 비교해 읽기·추가·수정·삭제를 본인 메모로 제한. DB의 GRANT·RLS 정책은 다음 요청 | API 구현·로컬 시험 통과(가짜 표 기준). 배포 후 A·B 확인은 아직. 시험용 소유자 연결 SQL은 Supabase에서 적용·조회로 확인 |
+| 4 | 서버 API의 소유자 검사(검증한 사용자 ID와 `owner_id` 비교)와 Supabase의 GRANT·RLS를 본인 행만 허용하도록 적용 | API는 배포 완료(`ed3c069`). DB 정책 네 개를 Supabase에서 실행하고 `pg_policies` 조회로 확인, `anon` 키 직접 요청 거부 확인. 배포 서버에서 A·B 토큰으로 직접 확인한 점검은 **미실행** |
 
 ## 현재 기능
 
@@ -23,6 +23,7 @@
   - 소유자 검사: 한 건 읽기·수정·삭제는 `id`와 `owner_id = 검증된 사용자 ID`를 한 질의에 함께 걸어, 남의 메모는 없는 메모와 똑같이 `404`로 거부합니다. 추가는 본문의 `owner_id`를 쓰지 않고 항상 검증된 사용자 ID로 저장합니다. 수정 본문에 내 ID가 아닌 `owner_id`가 있으면 `403`으로 거부하고 소유자는 바뀌지 않습니다.
   - `aleph.config.json`의 `identityProvider`(Supabase 발급자·대상·공개키 주소)와 `allowedRoutes`(위 다섯 경로)에 같은 내용을 적었습니다.
 - `supabase/notes.sql`: 표 생성(`owner_id uuid`, `auth.users` 외래키 없음), RLS 켜기, `anon`·`authenticated` 권한 회수, 가상 메모 네 건 입력, 확인용 조회. 메모 문장이 들어 있어 `.gitignore`로 Git에서 뺐습니다. 이 컴퓨터에만 있습니다.
+- DB 권한(`supabase/notes-permissions.sql`, 로컬 기록): `notes`에 RLS를 켜고 `anon`·`authenticated`·`public`의 권한을 모두 회수한 뒤 `authenticated`에만 SELECT·INSERT·UPDATE·DELETE를 부여합니다. 정책은 네 개이고 모두 `auth.uid() = owner_id`일 때만 허용합니다(SELECT·DELETE는 기존 행, INSERT는 새 행, UPDATE는 기존 행과 새 행 모두).
 - `vercel.json`의 `headers`로 모든 응답에 `X-Content-Type-Options: nosniff`를 붙입니다. 확인: `curl -sI https://choi-bujang-secret-vault-hailey17.vercel.app/ | grep -i x-content-type-options`
 - 공개 `/data.json`과 저장소의 `data.json`은 없앴습니다. 빌드(`npm run build`)는 `public/aleph.json`(저장소·커밋·배포 주소)만 만듭니다.
 
@@ -37,7 +38,9 @@
 
 ## 남은 약점
 
-- **DB 권한은 아직 설계 전입니다.** 소유자 검사는 서버 API에만 있습니다. 서버는 서버 전용 키로 읽어 RLS를 건너뛰므로, Supabase의 GRANT·RLS를 본인 행만 허용하도록 만드는 일은 다음 요청으로 남아 있습니다. 직접 Data API 점검은 `anon` 키로만 하며, 심판이 재현할 수 없는 `authenticated` 역할의 직접 접근은 범위 밖입니다.
+- **서버 API는 RLS를 건너뜁니다.** 서버 함수는 서버 전용 키로 읽으므로 DB 정책이 아니라 `src/notes-api.mjs`의 소유자 비교가 실제 방어선입니다. 이 키가 새면 표 전체가 열립니다.
+- **직접 Data API 점검 범위**: `anon` 키로 `/rest/v1/notes`를 읽고 지우는 요청은 `permission denied`(HTTP 401)로 거부되는 것을 직접 요청해 확인했습니다. `authenticated` 역할의 직접 접근은 심판이 재현할 수 없어 점수 밖이며, 정책으로만 설계했고 로그인 토큰으로 직접 요청해 보지는 않았습니다.
+- **미실행 점검**: 배포 서버에서 B의 토큰으로 A의 메모를 읽고·고치고·지우는 요청은 로그인 토큰이 필요해 실행하지 않았습니다. 로컬 시험(가짜 표)으로만 확인했습니다. 화면에서 A·B가 각자 자기 메모만 보는지는 사람이 직접 확인합니다.
 - 시험 한계: `npm run test:notes` 같은 로컬 시험은 가짜 표로 돌린 것입니다. 실제 Supabase와 A·B의 로그인 토큰으로 확인한 결과가 아닙니다. 배포 후 A·B로 직접 확인해야 합니다.
 - 서버 함수는 서버 전용 키로 읽으므로 RLS를 건너뜁니다. 이 키가 새면 표 전체가 열립니다. 키는 Vercel 환경변수에만 둡니다.
 - **옛 공개 노출은 해소되지 않았습니다.** 첫 커밋 `ce0237b`에는 `data.json`과 `public/data.json`이 그대로 있고, 옛 배포 주소와 옛 미리보기 배포에도 메모가 남아 있을 수 있습니다. 그 기록이 남는 한 과거 노출이 해소됐다고 말할 수 없습니다.
