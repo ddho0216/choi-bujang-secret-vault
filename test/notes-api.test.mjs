@@ -97,12 +97,53 @@ test('클라이언트가 준 id를 쓰고, 중복 id와 잘못된 입력은 거�
   assert.equal((await call(api, 'GET', { id: 'not-a-uuid' })).code, 404);
 });
 
-test('알려진 허점: 소유자 검사가 없어 B가 A의 메모를 고칠 수 있다 (4단계에서 막는다)', async () => {
-  const api = createNotesApi({ verifier, supabase: fakeSupabase() });
+test('B는 A의 메모를 읽거나 고치거나 지울 수 없고, A의 메모는 그대로 남는다', async () => {
+  const supabase = fakeSupabase();
+  const api = createNotesApi({ verifier, supabase });
   currentUser = A;
   const { id } = (await call(api, 'POST', { body: { title: 'A의 메모', body: 'A' } })).payload;
+
   currentUser = B;
-  const stolen = await call(api, 'PUT', { id, body: { title: 'B가 고침', body: 'B' } });
-  assert.equal(stolen.code, 200, '이 단계에서는 B의 수정이 통과한다. 4단계에서 403/404가 되어야 한다');
-  assert.deepEqual((await call(api, 'GET')).payload, [], 'B의 목록에는 A의 메모가 나오지 않는다');
+  const read = await call(api, 'GET', { id });
+  assert.equal(read.code, 404, 'B의 읽기는 없는 메모와 똑같이 거부된다');
+  assert.equal(JSON.stringify(read.payload).includes('A의 메모'), false, '응답에 A의 내용이 새지 않는다');
+  assert.equal((await call(api, 'PUT', { id, body: { title: 'B가 고침', body: 'B' } })).code, 404);
+  assert.equal((await call(api, 'DELETE', { id })).code, 404);
+  assert.deepEqual((await call(api, 'GET')).payload, [], 'B의 목록에는 A의 메모가 없다');
+
+  currentUser = A;
+  assert.deepEqual((await call(api, 'GET', { id })).payload, { id, title: 'A의 메모', body: 'A' },
+    'B의 시도 뒤에도 A의 메모는 바뀌지 않았다');
+});
+
+test('A와 B는 각자 자기 메모의 읽기·추가·수정·삭제를 유지한다', async () => {
+  const api = createNotesApi({ verifier, supabase: fakeSupabase() });
+  for (const user of [A, B]) {
+    currentUser = user;
+    const { id } = (await call(api, 'POST', { body: { title: '내 메모', body: '본문' } })).payload;
+    assert.equal((await call(api, 'GET', { id })).code, 200);
+    assert.equal((await call(api, 'PUT', { id, body: { title: '수정', body: '새 본문' } })).code, 200);
+    assert.equal((await call(api, 'GET')).payload.length, 1);
+    assert.equal((await call(api, 'DELETE', { id })).code, 200);
+    assert.equal((await call(api, 'GET', { id })).code, 404);
+  }
+});
+
+test('본문의 owner_id는 믿지 않는다: 추가는 확인된 ID로 저장, 수정에서 소유자 변경은 거부', async () => {
+  const supabase = fakeSupabase();
+  const api = createNotesApi({ verifier, supabase });
+  currentUser = A;
+  const created = await call(api, 'POST', { body: { title: 't', body: 'b', owner_id: B.userId } });
+  assert.equal(created.code, 201);
+  assert.equal(supabase.rows[0].owner_id, A.userId, '본문이 B를 말해도 A로 저장된다');
+  const { id } = created.payload;
+
+  for (const field of ['owner_id', 'ownerId']) {
+    const change = await call(api, 'PUT', { id, body: { title: 'x', body: 'y', [field]: B.userId } });
+    assert.equal(change.code, 403, field);
+  }
+  assert.equal(supabase.rows[0].owner_id, A.userId, '소유자는 바뀌지 않았다');
+  assert.equal(supabase.rows[0].title, 't', '거부된 수정은 내용도 바꾸지 않았다');
+  const same = await call(api, 'PUT', { id, body: { title: 'x', body: 'y', owner_id: A.userId } });
+  assert.equal(same.code, 200, '내 ID를 적는 것은 허용되지만 값은 쓰지 않는다');
 });

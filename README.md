@@ -8,7 +8,9 @@
 |---|---|---|
 | 1 | 시작 틀로 GitHub 저장소와 Vercel 배포를 만들고, `/data.json`에 메모가 공개된 상태를 확인 | 완료(첫 커밋 `ce0237b`) |
 | 2 | 메모를 코드 밖(Supabase 표)으로 옮기고 `api/notes.js`를 통해 읽음. 보안 헤더(`nosniff`) 추가 | 완료·배포 확인(`b823ec1`, `4678663`) |
-| 3 | Supabase Auth 이메일·비밀번호 로그인·로그아웃 화면, 로그인한 사용자의 메모 추가·수정·삭제 화면과 서버 API(서버가 토큰 검증), `aleph.config.json`에 `identityProvider`·`allowedRoutes` | 구현·로컬 시험 통과. 배포 후 실제 계정 확인은 아직 |
+| 3 | Supabase Auth 이메일·비밀번호 로그인·로그아웃 화면, 로그인한 사용자의 메모 추가·수정·삭제 화면과 서버 API(서버가 토큰 검증), `aleph.config.json`에 `identityProvider`·`allowedRoutes` | 배포 완료(`7b9e987`). 로그인해 추가한 메모가 A의 `owner_id`로 저장된 것은 DB 조회로 확인 |
+
+| 4 | 서버 API의 소유자 검사: 검증한 사용자 ID와 메모의 `owner_id`를 비교해 읽기·추가·수정·삭제를 본인 메모로 제한. DB의 GRANT·RLS 정책은 다음 요청 | API 구현·로컬 시험 통과(가짜 표 기준). 배포 후 A·B 확인은 아직. 시험용 소유자 연결 SQL은 Supabase에서 적용·조회로 확인 |
 
 ## 현재 기능
 
@@ -17,7 +19,8 @@
 - 서버 API(`api/notes.js`, `api/notes/[id].js`, 로직은 `src/notes-api.mjs`): 모든 요청에서 `Authorization: Bearer` 토큰을 `src/verify-login.mjs`로 검증하고, 서버가 확인한 사용자 ID로 로그인 여부를 판단합니다. 실패하면 `401`입니다. 환경변수 `SUPABASE_URL`, `SUPABASE_SECRET_KEY`는 서버에서만 읽고 응답·로그에 쓰지 않습니다.
   - `GET /api/notes`: 로그인 사용자의 메모 배열 `[{id,title,body}]`
   - `POST /api/notes`: `{id?,title,body}` 추가. `id`는 UUID이고 없으면 서버가 만들어 `{id}`로 돌려줍니다(`201`). 서버가 확인한 사용자 ID를 `owner_id`로 저장합니다.
-  - `GET·PUT·DELETE /api/notes/:id`: 한 건 조회 `{id,title,body}`·수정·삭제. 지운 뒤 GET은 `404`입니다.
+  - `GET·PUT·DELETE /api/notes/:id`: 한 건 조회 `{id,title,body}`·수정(본문 `{title,body}`)·삭제. 지운 뒤 GET은 `404`입니다.
+  - 소유자 검사: 한 건 읽기·수정·삭제는 `id`와 `owner_id = 검증된 사용자 ID`를 한 질의에 함께 걸어, 남의 메모는 없는 메모와 똑같이 `404`로 거부합니다. 추가는 본문의 `owner_id`를 쓰지 않고 항상 검증된 사용자 ID로 저장합니다. 수정 본문에 내 ID가 아닌 `owner_id`가 있으면 `403`으로 거부하고 소유자는 바뀌지 않습니다.
   - `aleph.config.json`의 `identityProvider`(Supabase 발급자·대상·공개키 주소)와 `allowedRoutes`(위 다섯 경로)에 같은 내용을 적었습니다.
 - `supabase/notes.sql`: 표 생성(`owner_id uuid`, `auth.users` 외래키 없음), RLS 켜기, `anon`·`authenticated` 권한 회수, 가상 메모 네 건 입력, 확인용 조회. 메모 문장이 들어 있어 `.gitignore`로 Git에서 뺐습니다. 이 컴퓨터에만 있습니다.
 - `vercel.json`의 `headers`로 모든 응답에 `X-Content-Type-Options: nosniff`를 붙입니다. 확인: `curl -sI https://choi-bujang-secret-vault-hailey17.vercel.app/ | grep -i x-content-type-options`
@@ -34,8 +37,8 @@
 
 ## 남은 약점
 
-- **소유자 검사가 없습니다(4단계에서 고칠 허점).** 서버는 로그인 여부만 확인합니다. 그래서 로그인한 B가 A의 메모 id를 알면 `GET·PUT·DELETE /api/notes/:id`로 A의 메모를 읽고 고치고 지울 수 있습니다. 목록 `GET /api/notes`는 내 메모만 돌려주지만, 한 건 경로는 소유자를 보지 않습니다. 이 점은 `test/notes-api.test.mjs`에 허점으로 기록해 두었습니다. 4단계에서 B의 접근을 실제로 시도해 기록하고 막습니다.
-- 시험 한계: `npm run test:notes` 같은 로컬 시험은 가짜 표로 돌린 것입니다. 실제 Supabase와 로그인 토큰으로 확인한 결과가 아닙니다.
+- **DB 권한은 아직 설계 전입니다.** 소유자 검사는 서버 API에만 있습니다. 서버는 서버 전용 키로 읽어 RLS를 건너뛰므로, Supabase의 GRANT·RLS를 본인 행만 허용하도록 만드는 일은 다음 요청으로 남아 있습니다. 직접 Data API 점검은 `anon` 키로만 하며, 심판이 재현할 수 없는 `authenticated` 역할의 직접 접근은 범위 밖입니다.
+- 시험 한계: `npm run test:notes` 같은 로컬 시험은 가짜 표로 돌린 것입니다. 실제 Supabase와 A·B의 로그인 토큰으로 확인한 결과가 아닙니다. 배포 후 A·B로 직접 확인해야 합니다.
 - 서버 함수는 서버 전용 키로 읽으므로 RLS를 건너뜁니다. 이 키가 새면 표 전체가 열립니다. 키는 Vercel 환경변수에만 둡니다.
 - **옛 공개 노출은 해소되지 않았습니다.** 첫 커밋 `ce0237b`에는 `data.json`과 `public/data.json`이 그대로 있고, 옛 배포 주소와 옛 미리보기 배포에도 메모가 남아 있을 수 있습니다. 그 기록이 남는 한 과거 노출이 해소됐다고 말할 수 없습니다.
 

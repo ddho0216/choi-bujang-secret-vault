@@ -21,8 +21,11 @@ const readBody = request => {
 const validNote = input => input && typeof input.title === 'string' && typeof input.body === 'string'
   && input.title.trim().length > 0 && input.title.length <= TITLE_MAX && input.body.length <= BODY_MAX;
 
-// 서버가 확인한 사용자 ID로만 로그인 여부를 판단한다. 소유자 검사는 4단계에서 붙인다.
-// 지금은 id만 알면 누구든 다른 사람의 메모를 읽고 고치고 지울 수 있다(알려진 허점).
+// 소유자는 서버가 검증한 사용자 ID(user.userId)로만 정한다. URL·본문의 owner_id는 믿지 않는다.
+// 한 건 읽기·수정·삭제는 id와 owner_id를 한 질의에 함께 걸어, 남의 메모와 없는 메모를 똑같이 404로 거부한다.
+// (남의 메모가 있다는 사실도 알려 주지 않는다.)
+const bodyOwner = input => (Object.hasOwn(input, 'owner_id') ? input.owner_id
+  : Object.hasOwn(input, 'ownerId') ? input.ownerId : undefined);
 export function createNotesApi({ verifier, supabase }) {
   const notes = () => supabase.from('notes');
 
@@ -40,6 +43,7 @@ export function createNotesApi({ verifier, supabase }) {
         return send(response, 400, { error: 'INVALID_ID' });
       }
       const id = input.id ?? randomUUID();
+      // 본문에 owner_id가 있어도 쓰지 않는다. 항상 서버가 확인한 사용자 ID로 저장한다.
       const { error } = await notes().insert(
         { id, owner_id: user.userId, title: input.title.trim(), content: input.body });
       if (error?.code === '23505') return send(response, 409, { error: 'ID_EXISTS' });
@@ -50,23 +54,31 @@ export function createNotesApi({ verifier, supabase }) {
     return send(response, 405, { error: 'METHOD_NOT_ALLOWED' });
   }
 
-  async function item(request, response, id) {
+  async function item(request, response, id, user) {
     if (!UUID.test(id ?? '')) return send(response, 404, { error: 'NOT_FOUND' });
     if (request.method === 'GET') {
-      const { data, error } = await notes().select('id, title, content').eq('id', id).maybeSingle();
+      const { data, error } = await notes().select('id, title, content')
+        .eq('id', id).eq('owner_id', user.userId).maybeSingle();
       if (error) return send(response, 502, { error: 'NOTES_UNAVAILABLE' });
       return data ? send(response, 200, toPublic(data)) : send(response, 404, { error: 'NOT_FOUND' });
     }
     if (request.method === 'PUT') {
       const input = readBody(request);
       if (!validNote(input)) return send(response, 400, { error: 'INVALID_NOTE' });
+      // 소유자를 바꾸려는 요청(본문 owner_id가 내 ID가 아님)은 거부한다.
+      const claimed = bodyOwner(input);
+      if (claimed !== undefined && claimed !== user.userId) {
+        return send(response, 403, { error: 'OWNER_CHANGE_FORBIDDEN' });
+      }
+      // 기존 행의 소유자가 나일 때만 고친다. 새 행의 owner_id는 값에 넣지 않으므로 그대로 나다.
       const { data, error } = await notes().update({ title: input.title.trim(), content: input.body })
-        .eq('id', id).select('id, title, content');
+        .eq('id', id).eq('owner_id', user.userId).select('id, title, content');
       if (error) return send(response, 502, { error: 'NOTES_UNAVAILABLE' });
       return data?.length ? send(response, 200, toPublic(data[0])) : send(response, 404, { error: 'NOT_FOUND' });
     }
     if (request.method === 'DELETE') {
-      const { data, error } = await notes().delete().eq('id', id).select('id');
+      const { data, error } = await notes().delete()
+        .eq('id', id).eq('owner_id', user.userId).select('id');
       if (error) return send(response, 502, { error: 'NOTES_UNAVAILABLE' });
       return data?.length ? send(response, 200, { id }) : send(response, 404, { error: 'NOT_FOUND' });
     }
@@ -81,7 +93,7 @@ export function createNotesApi({ verifier, supabase }) {
         response.setHeader('WWW-Authenticate', 'Bearer');
         return send(response, 401, { error: 'UNAUTHENTICATED' });
       }
-      return id === undefined ? await collection(request, response, user) : await item(request, response, id);
+      return id === undefined ? await collection(request, response, user) : await item(request, response, id, user);
     } catch {
       return send(response, 502, { error: 'NOTES_UNAVAILABLE' });
     }
