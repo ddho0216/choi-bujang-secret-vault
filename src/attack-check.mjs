@@ -4,7 +4,7 @@
 const PUBLISHABLE_KEY = 'sb_publishable_eTa8b4uziI31qAh_rSmyLA_t_CpLlo3';
 
 export async function runAttackChecks(config) {
-  if (![1, 2, 3, 4].includes(config.step)) {
+  if (![1, 2, 3, 4, 5].includes(config.step)) {
     throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
   }
   let app;
@@ -70,8 +70,9 @@ export async function runAttackChecks(config) {
     ];
     if (config.step === 3) return attempts;
 
-    // 4단계: 직접 Data API는 anon(공개용) 키로만 확인한다. 읽기와, 아무 행도 가리키지 않는 삭제를 보낸다.
-    const dataApi = new URL('/rest/v1/notes', new URL(config.identityProvider.issuer).origin);
+    // 4단계~: 직접 Data API는 anon(공개용) 키로만 확인한다. 읽기와, 아무 행도 가리키지 않는 삭제를 보낸다.
+    // 5단계부터는 aleph.config.json의 originalApiUrl(쿼리 없는 원본 자료 경로)을 그대로 쓴다.
+    const dataApi = new URL(config.originalApiUrl ?? new URL('/rest/v1/notes', new URL(config.identityProvider.issuer).origin));
     const anonHeaders = { apikey: PUBLISHABLE_KEY, Authorization: `Bearer ${PUBLISHABLE_KEY}` };
     const direct = (method, search) => fetch(Object.assign(new URL(dataApi), { search }), {
       method, headers: anonHeaders, redirect: 'error', signal: AbortSignal.timeout(10000),
