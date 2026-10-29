@@ -10,12 +10,12 @@
 | 2 | 메모를 코드 밖(Supabase 표)으로 옮기고 `api/notes.js`를 통해 읽음. 보안 헤더(`nosniff`) 추가 | 완료·배포 확인(`b823ec1`, `4678663`) |
 | 3 | Supabase Auth 이메일·비밀번호 로그인·로그아웃 화면, 로그인한 사용자의 메모 추가·수정·삭제 화면과 서버 API(서버가 토큰 검증), `aleph.config.json`에 `identityProvider`·`allowedRoutes` | 배포 완료(`7b9e987`). 로그인해 추가한 메모가 A의 `owner_id`로 저장된 것은 DB 조회로 확인 |
 | 4 | 서버 API의 소유자 검사(검증한 사용자 ID와 `owner_id` 비교)와 Supabase의 GRANT·RLS를 본인 행만 허용하도록 적용 | 완료·배포(`ed3c069`, `7918c83`). DB 정책 네 개를 Supabase에서 실행하고 `pg_policies` 조회로 확인, `anon` 키 직접 요청 거부 확인. 배포 서버에서 A·B 토큰으로 직접 확인한 점검은 **미실행** |
-| 5 | 자료 요청을 서버 한곳으로 모음: 브라우저의 직접 자료 호출 점검(없음), 학습 DB의 PUBLIC·anon·authenticated 직접 권한 회수, `originalApiUrl` 기입 | 구현·DB 적용 확인. 권한 조회에서 `anon`·`authenticated`는 모두 `false`, `service_role`은 `true`. 적용 뒤 A 화면의 읽기·추가·수정·삭제 정상은 사람이 확인 |
+| 5 | 자료 요청을 서버 한곳으로 모음: 브라우저의 직접 자료 호출 점검(없음), 학습 DB의 PUBLIC·anon·authenticated 직접 권한 회수, `originalApiUrl` 기입. 가점: 로그인·로그아웃도 서버 함수(`/api/login`, `/api/logout`)로 옮겨 화면 코드에서 공개 키 제거 | 구현·DB 적용 확인. 권한 조회에서 `anon`·`authenticated`는 모두 `false`, `service_role`은 `true`. 서버 로그인 코드는 실제 Supabase에 틀린 계정으로 실행해 연결을 확인했고, 로그인 성공 흐름은 배포 뒤 사람이 확인 |
 
 ## 현재 기능
 
 - `/`: 로그인하면 내 가상 메모 목록을 보여 주고, 메모를 추가·수정·삭제할 수 있습니다. 로그인하지 않으면 안내 문구만 보입니다.
-- 로그인: `/`의 로그인 칸에서 Supabase 공식 SDK(`signInWithPassword`, `signOut`)로 로그인·로그아웃합니다. 로그인하면 계정 이메일과 로그아웃 버튼이, 로그아웃하면 입력 폼이 보입니다. 실패하면 Supabase가 준 이유를 화면에 보여 줍니다. 화면 코드의 Project URL과 publishable key는 공개용 값이며, 서버 전용 secret 키는 넣지 않았습니다. 비밀번호·JWT는 직접 만들지 않습니다.
+- 로그인: 화면의 로그인 칸은 `/api/login`, 로그아웃 버튼은 `/api/logout`을 부릅니다. 서버 함수(`api/login.js`, `api/logout.js`, 로직은 `src/auth-api.mjs`)가 Supabase 공식 SDK(`signInWithPassword`, `admin.signOut`)로 대신 처리하므로 화면 코드(`public/index.html`)에는 Supabase 주소도 공개 키도 없습니다. 비밀번호는 Supabase로 전달만 하고 저장·로그·응답에 쓰지 않으며 JWT는 직접 만들지 않습니다. 성공하면 `{access_token, expires_at, email}`만 돌려주고(`refresh_token`은 주지 않음), 화면은 이 탭의 `sessionStorage`에 보관합니다. 실패하면 Supabase가 준 이유를 화면에 보여 줍니다. 로그인하면 계정 이메일과 로그아웃 버튼이, 로그아웃하면 입력 폼이 보입니다. 공개 키(publishable)는 비밀은 아니지만 브라우저가 받는 `public/` 밖의 서버 전용 파일(`src/supabase-public.mjs`)에서만 씁니다.
 - 서버 API(`api/notes.js`, `api/notes/[id].js`, 로직은 `src/notes-api.mjs`): 모든 요청에서 `Authorization: Bearer` 토큰을 `src/verify-login.mjs`로 검증하고, 서버가 확인한 사용자 ID로 로그인 여부를 판단합니다. 실패하면 `401`입니다. 환경변수 `SUPABASE_URL`, `SUPABASE_SECRET_KEY`는 서버에서만 읽고 응답·로그에 쓰지 않습니다.
   - `GET /api/notes`: 로그인 사용자의 메모 배열 `[{id,title,body}]`
   - `POST /api/notes`: `{id?,title,body}` 추가. `id`는 UUID이고 없으면 서버가 만들어 `{id}`로 돌려줍니다(`201`). 서버가 확인한 사용자 ID를 `owner_id`로 저장합니다.
@@ -24,7 +24,7 @@
   - `aleph.config.json`의 `identityProvider`(Supabase 발급자·대상·공개키 주소)와 `allowedRoutes`(위 다섯 경로)에 같은 내용을 적었습니다.
 - `supabase/notes.sql`: 표 생성(`owner_id uuid`, `auth.users` 외래키 없음), RLS 켜기, `anon`·`authenticated` 권한 회수, 가상 메모 네 건 입력, 확인용 조회. 메모 문장이 들어 있어 `.gitignore`로 Git에서 뺐습니다. 이 컴퓨터에만 있습니다.
 - DB 권한(`supabase/notes-permissions.sql`, 로컬 기록): `notes`에 RLS를 켜고 `anon`·`authenticated`·`public`의 권한을 모두 회수한 뒤 `authenticated`에만 SELECT·INSERT·UPDATE·DELETE를 부여합니다. 정책은 네 개이고 모두 `auth.uid() = owner_id`일 때만 허용합니다(SELECT·DELETE는 기존 행, INSERT는 새 행, UPDATE는 기존 행과 새 행 모두). 5단계에서 이 직접 권한은 다시 회수했고 정책만 남아 있습니다.
-- 직접 권한 회수(`supabase/notes-revoke-direct.sql`, 로컬 기록): `public.notes`의 `PUBLIC`·`anon`·`authenticated` 권한을 모두 회수했습니다. 이제 `notes`는 서버 함수(서버 전용 키, `service_role`)만 읽고 씁니다. 화면 코드는 Supabase를 `auth`로만 부르고 자료는 `/api/notes`로만 요청합니다(직접 자료 호출은 점검 결과 없음). `aleph.config.json`의 `originalApiUrl`은 쿼리 없는 원본 경로 `https://meupslbrbesjtyuwpske.supabase.co/rest/v1/notes`이며, 이 경로를 `anon` 키로 직접 부르면 `permission denied`(HTTP 401)입니다.
+- 직접 권한 회수(`supabase/notes-revoke-direct.sql`, 로컬 기록): `public.notes`의 `PUBLIC`·`anon`·`authenticated` 권한을 모두 회수했습니다. 이제 `notes`는 서버 함수(서버 전용 키, `service_role`)만 읽고 씁니다. 화면 코드는 Supabase를 직접 부르지 않고 로그인은 `/api/login`, 자료는 `/api/notes`로만 요청합니다(직접 자료 호출은 점검 결과 없음). `aleph.config.json`의 `originalApiUrl`은 쿼리 없는 원본 경로 `https://meupslbrbesjtyuwpske.supabase.co/rest/v1/notes`이며, 이 경로를 `anon` 키로 직접 부르면 `permission denied`(HTTP 401)입니다.
 - `vercel.json`의 `headers`로 모든 응답에 `X-Content-Type-Options: nosniff`를 붙입니다. 확인: `curl -sI https://choi-bujang-secret-vault-hailey17.vercel.app/ | grep -i x-content-type-options`
 - 공개 `/data.json`과 저장소의 `data.json`은 없앴습니다. 빌드(`npm run build`)는 `public/aleph.json`(저장소·커밋·배포 주소)만 만듭니다.
 
@@ -42,7 +42,7 @@
 
 - **서버 API는 RLS를 건너뜁니다.** 서버 함수는 서버 전용 키로 읽으므로 DB 정책이 아니라 `src/notes-api.mjs`의 소유자 비교가 실제 방어선입니다. 이 키가 새면 표 전체가 열리므로 키는 Vercel 환경변수에만 둡니다.
 - **직접 Data API 점검 범위**: `anon` 키로 `/rest/v1/notes`를 읽고 지우는 요청은 `permission denied`(HTTP 401)로 거부되는 것을 직접 요청해 확인했습니다. `authenticated` 역할도 5단계에서 직접 권한을 회수해 `has_table_privilege`로 `false`를 확인했지만, 로그인 토큰으로 직접 요청해 보지는 않았습니다. 심판은 `anon` 키로만 확인합니다.
-- **화면 코드의 공개 키**: 로그인은 브라우저가 Supabase Auth를 직접 부르므로 `index.html`에 publishable 키가 들어 있습니다. 로그인까지 서버 함수로 옮기는 가점은 하지 않았습니다.
+- **로그인 토큰 보관**: 로그인 토큰은 이 탭의 `sessionStorage`에 둡니다. 이 화면은 문자열을 `textContent`로만 그려 스크립트 주입을 막지만, 같은 출처에서 스크립트가 실행되면 토큰을 읽을 수 있습니다(httpOnly 쿠키보다 약함). `refresh_token`을 주지 않으므로 토큰이 만료되면(Supabase 기본 약 1시간) 다시 로그인해야 합니다. 로그인 시도 횟수 제한은 Supabase의 기본 제한에 맡기며 서버 함수에는 따로 두지 않았습니다.
 - **미실행 점검**: 배포 서버에서 B의 토큰으로 A의 메모를 읽고·고치고·지우는 요청은 로그인 토큰이 필요해 실행하지 않았습니다. 로컬 시험(가짜 표)으로만 확인했습니다. 화면에서 A·B가 각자 자기 메모만 보는지는 사람이 직접 확인합니다.
 - 시험 한계: `npm run test:notes` 같은 로컬 시험은 가짜 표로 돌린 것입니다. 실제 Supabase와 A·B의 로그인 토큰으로 확인한 결과가 아닙니다. 배포 후 A·B로 직접 확인해야 합니다.
 - **옛 공개 노출은 해소되지 않았습니다.** 첫 커밋 `ce0237b`에는 `data.json`과 `public/data.json`이 그대로 있고, 옛 배포 주소와 옛 미리보기 배포에도 메모가 남아 있을 수 있습니다. 그 기록이 남는 한 과거 노출이 해소됐다고 말할 수 없습니다.

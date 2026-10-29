@@ -72,14 +72,10 @@
     <p id="notes-error" class="error" role="alert" hidden></p>
     <ul id="notes" aria-live="polite"><li>로그인하면 내 가상 메모가 보입니다.</li></ul>
   </main>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"
-    integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok"
-    crossorigin="anonymous"></script>
   <script type="module">
-    // 로그인: Supabase 공식 SDK만 사용한다. 아래 두 값은 공개용(Project URL, publishable key)이다.
-    // 서버 전용 secret 키는 이 파일에 넣지 않는다.
-    const SUPABASE_URL = 'https://meupslbrbesjtyuwpske.supabase.co';
-    const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_eTa8b4uziI31qAh_rSmyLA_t_CpLlo3';
+    // 로그인·로그아웃은 서버 함수(/api/login, /api/logout)가 대신한다.
+    // 이 파일은 인증 서비스의 주소도 키도 모른다. 서버가 돌려준 토큰만 이 탭에 보관한다.
+    const SESSION_KEY = 'vault-session';
     const $ = selector => document.querySelector(selector);
     const form = $('#login-form');
     const signedIn = $('#signed-in');
@@ -92,17 +88,44 @@
       element.hidden = !message;
     };
 
-    let accessToken = null;
+    const readSession = () => {
+      try {
+        const saved = JSON.parse(sessionStorage.getItem(SESSION_KEY));
+        if (saved?.access_token && saved.expires_at * 1000 > Date.now()) return saved;
+      } catch {
+        // 저장소를 읽지 못하면 로그아웃 상태로 본다.
+      }
+      return null;
+    };
+    const writeSession = next => {
+      try {
+        if (next) sessionStorage.setItem(SESSION_KEY, JSON.stringify(next));
+        else sessionStorage.removeItem(SESSION_KEY);
+      } catch {
+        // 저장하지 못해도 새로고침하면 로그아웃되는 정도다.
+      }
+    };
+
+    let session = null;
     // 서버가 토큰을 검증한다. 화면은 로그인 상태를 보여 줄 뿐 권한을 판단하지 않는다.
     const api = async (path, options = {}) => {
       const response = await fetch(path, {
         cache: 'no-store',
         ...options,
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
       });
       const data = await response.json().catch(() => null);
+      if (response.status === 401) {
+        showSession(null);
+        setError(authError, '로그인이 만료되었거나 필요합니다. 다시 로그인해 주세요.');
+        throw new Error('로그인이 필요합니다 (401)');
+      }
       if (!response.ok) throw new Error(`요청이 거부되었습니다 (${response.status})`);
       return data;
+    };
+    // 로그인이 풀린 뒤에는 오류를 목록 쪽에 따로 띄우지 않는다.
+    const fail = (prefix, error) => {
+      if (session) setError(notesError, `${prefix}: ${error.message}`);
     };
 
     const renderEmpty = text => {
@@ -133,7 +156,7 @@
             await loadNotes();
           } catch (error) {
             remove.disabled = false;
-            setError(notesError, `삭제 실패: ${error.message}`);
+            fail('삭제 실패', error);
           }
         });
         row.append(edit, remove);
@@ -166,7 +189,7 @@
             show();
           } catch (error) {
             save.disabled = false;
-            setError(notesError, `수정 실패: ${error.message}`);
+            fail('수정 실패', error);
           }
         });
         item.replaceChildren(editor);
@@ -183,18 +206,19 @@
         if (!notes.length) return renderEmpty('아직 메모가 없습니다. 위에서 추가해 보세요.');
         list.replaceChildren(...notes.map(renderNote));
       } catch (error) {
-        renderEmpty(error.message);
+        if (session) renderEmpty(error.message);
       }
     }
 
-    const showSession = session => {
-      accessToken = session?.access_token ?? null;
-      form.hidden = Boolean(session);
-      signedIn.hidden = !session;
-      $('#composer').hidden = !session;
-      $('#auth-title').textContent = session ? '로그인됨' : '로그인';
-      $('#account-email').textContent = session?.user?.email ?? '';
-      if (session) {
+    const showSession = next => {
+      session = next;
+      writeSession(next);
+      form.hidden = Boolean(next);
+      signedIn.hidden = !next;
+      $('#composer').hidden = !next;
+      $('#auth-title').textContent = next ? '로그인됨' : '로그인';
+      $('#account-email').textContent = next?.email ?? '';
+      if (next) {
         loadNotes();
       } else {
         setError(notesError, '');
@@ -202,60 +226,66 @@
       }
     };
 
-    if (!window.supabase) {
-      setError(authError, '로그인 라이브러리를 불러오지 못했습니다. 새로고침해 주세요.');
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      setError(authError, '');
       loginButton.disabled = true;
-    } else {
-      const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
-      let lastToken;
-      // 토큰 갱신 때도 호출되므로 같은 토큰이면 목록을 다시 불러오지 않는다.
-      supabase.auth.onAuthStateChange((_event, session) => {
-        if ((session?.access_token ?? null) === lastToken) return;
-        lastToken = session?.access_token ?? null;
-        showSession(session);
-      });
-      form.addEventListener('submit', async event => {
-        event.preventDefault();
-        setError(authError, '');
-        loginButton.disabled = true;
-        const { error } = await supabase.auth.signInWithPassword({
-          email: $('#email').value.trim(),
-          password: $('#password').value,
+      try {
+        const response = await fetch('/api/login', {
+          method: 'POST',
+          cache: 'no-store',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: $('#email').value.trim(), password: $('#password').value }),
         });
-        loginButton.disabled = false;
+        const data = await response.json().catch(() => null);
         $('#password').value = '';
-        if (error) setError(authError, `로그인 실패: ${error.message}`);
-      });
-      $('#logout-button').addEventListener('click', async () => {
-        setError(authError, '');
-        const { error } = await supabase.auth.signOut();
-        if (error) setError(authError, `로그아웃 실패: ${error.message}`);
-      });
-      $('#add-form').addEventListener('submit', async event => {
-        event.preventDefault();
-        setError(notesError, '');
-        const button = $('#add-button');
-        button.disabled = true;
-        try {
-          // id를 비우면 서버가 만들어 {id}로 돌려준다.
-          await api('/api/notes', {
-            method: 'POST', body: JSON.stringify({ title: $('#add-title').value, body: $('#add-body').value }),
-          });
-          $('#add-title').value = '';
-          $('#add-body').value = '';
-          await loadNotes();
-        } catch (error) {
-          setError(notesError, `추가 실패: ${error.message}`);
-        } finally {
-          button.disabled = false;
+        if (!response.ok || !data?.access_token) {
+          setError(authError, `로그인 실패: ${data?.message ?? `요청이 거부되었습니다 (${response.status})`}`);
+          return;
         }
-      });
-      const { data } = await supabase.auth.getSession();
-      if (!lastToken) {
-        lastToken = data.session?.access_token ?? null;
-        showSession(data.session);
+        showSession({ access_token: data.access_token, expires_at: data.expires_at, email: data.email });
+      } catch {
+        setError(authError, '로그인 실패: 서버에 연결하지 못했습니다.');
+      } finally {
+        loginButton.disabled = false;
       }
-    }
+    });
+
+    $('#logout-button').addEventListener('click', async () => {
+      setError(authError, '');
+      const token = session?.access_token;
+      showSession(null);
+      if (!token) return;
+      try {
+        await fetch('/api/logout', {
+          method: 'POST', cache: 'no-store', headers: { Authorization: `Bearer ${token}` },
+        });
+      } catch {
+        // 서버에서 끊지 못해도 이 탭의 로그인은 이미 지웠다.
+      }
+    });
+
+    $('#add-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      setError(notesError, '');
+      const button = $('#add-button');
+      button.disabled = true;
+      try {
+        // id를 비우면 서버가 만들어 {id}로 돌려준다.
+        await api('/api/notes', {
+          method: 'POST', body: JSON.stringify({ title: $('#add-title').value, body: $('#add-body').value }),
+        });
+        $('#add-title').value = '';
+        $('#add-body').value = '';
+        await loadNotes();
+      } catch (error) {
+        fail('추가 실패', error);
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    showSession(readSession());
   </script>
 </body>
 </html>

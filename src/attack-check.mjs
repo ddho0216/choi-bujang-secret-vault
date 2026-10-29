@@ -1,7 +1,6 @@
 // The student changes this check as each stage adds an attack to the same app.
 // Never return tokens, private keys, real names, or note bodies.
-// Supabase 공개용(publishable) 키. 브라우저 화면 코드에도 들어 있는 값이며 비밀이 아니다.
-const PUBLISHABLE_KEY = 'sb_publishable_eTa8b4uziI31qAh_rSmyLA_t_CpLlo3';
+import { SUPABASE_PUBLISHABLE_KEY as PUBLISHABLE_KEY } from './supabase-public.mjs';
 
 export async function runAttackChecks(config) {
   if (![1, 2, 3, 4, 5].includes(config.step)) {
@@ -81,6 +80,10 @@ export async function runAttackChecks(config) {
     const directRows = await readJson(directRead);
     const directDelete = await direct('DELETE', `?id=eq.${fakeId}`);
     const denied = (res) => ([401, 403].includes(res.status) ? `거부됨 (HTTP ${res.status})` : `거부되지 않음 (HTTP ${res.status})`);
+    // 5단계~: 화면 응답에 Supabase 공개 키가 없어야 한다(로그인은 서버 함수가 대신한다).
+    const screen = await anonymous('/');
+    const screenText = screen.ok ? await screen.text() : '';
+    const keyPattern = /sb_publishable_|sb_secret_|eyJ[A-Za-z0-9_-]{12,}.eyJ/u;
     attempts.push(
       { attackId: 'anon_data_api_read', expected: '공개 키(anon)로 Data API에서 메모를 읽을 수 없어야 함',
         observed: `anon 키로 GET /rest/v1/notes ${denied(directRead)}${Array.isArray(directRows) ? `, 행 ${directRows.length}건이 돌아옴` : ''}` },
@@ -89,6 +92,11 @@ export async function runAttackChecks(config) {
       { attackId: 'cross_owner_access', expected: 'B가 A의 메모를 읽기·수정·삭제하면 거부되어야 함',
         observed: '미실행: 로그인 토큰이 필요해 이 점검에서는 요청하지 않음. 로컬 시험(가짜 표)으로만 확인함' },
     );
+    if (config.step >= 5) {
+      attempts.push({ attackId: 'screen_has_no_public_key', expected: '첫 화면 응답에 Supabase 공개 키가 없어야 함',
+        observed: !screen.ok ? `첫 화면을 읽지 못함 (HTTP ${screen.status})`
+          : keyPattern.test(screenText) ? '첫 화면 응답에 키 문자열이 보임' : '첫 화면 응답에 키 문자열이 보이지 않음' });
+    }
     return attempts;
   }
 
