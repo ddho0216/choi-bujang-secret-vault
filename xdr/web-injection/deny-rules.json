@@ -1,0 +1,123 @@
+{
+  "schema": "aleph.xdr.deny-rules.v1",
+  "moduleKey": "web-injection",
+  "connectedToDecider": false,
+  "ttlMinutes": 60,
+  "note": "넣을 규칙을 적어 둔 기록이다. src/decider.mjs 는 규칙 파일을 읽지 않고 판정 요청에 출발 주소가 없어 아직 연결되지 않았다.",
+  "rules": [
+    {
+      "ruleId": "web-injection.deny.192.0.2.15",
+      "action": "deny",
+      "match": {
+        "srcip": "192.0.2.15"
+      },
+      "reasons": [
+        "패턴 repeated_injection_marks, sql_injection_repeat"
+      ],
+      "confidence": 0.95,
+      "evidenceAlertIds": [
+        "wi-04"
+      ],
+      "effectiveFrom": "2026-09-27T01:02:11.000Z",
+      "expiresAt": "2026-09-27T02:02:11.000Z"
+    },
+    {
+      "ruleId": "web-injection.deny.192.0.2.21",
+      "action": "deny",
+      "match": {
+        "srcip": "192.0.2.21"
+      },
+      "reasons": [
+        "패턴 repeated_injection_marks, path_traversal_repeat"
+      ],
+      "confidence": 0.95,
+      "evidenceAlertIds": [
+        "wi-07"
+      ],
+      "effectiveFrom": "2026-09-27T04:04:19.000Z",
+      "expiresAt": "2026-09-27T05:04:19.000Z"
+    },
+    {
+      "ruleId": "web-injection.deny.198.51.100.15",
+      "action": "deny",
+      "match": {
+        "srcip": "198.51.100.15"
+      },
+      "reasons": [
+        "패턴 repeated_injection_marks, path_traversal_repeat"
+      ],
+      "confidence": 0.95,
+      "evidenceAlertIds": [
+        "wi-03"
+      ],
+      "effectiveFrom": "2026-09-27T00:16:04.000Z",
+      "expiresAt": "2026-09-27T01:16:04.000Z"
+    },
+    {
+      "ruleId": "web-injection.deny.198.51.100.18",
+      "action": "deny",
+      "match": {
+        "srcip": "198.51.100.18"
+      },
+      "reasons": [
+        "패턴 repeated_injection_marks"
+      ],
+      "confidence": 0.88,
+      "evidenceAlertIds": [
+        "wi-06"
+      ],
+      "effectiveFrom": "2026-09-27T02:07:08.000Z",
+      "expiresAt": "2026-09-27T03:07:08.000Z"
+    },
+    {
+      "ruleId": "web-injection.deny.203.0.113.10",
+      "action": "deny",
+      "match": {
+        "srcip": "203.0.113.10"
+      },
+      "reasons": [
+        "패턴 repeated_injection_marks, sql_injection_repeat",
+        "패턴 repeated_injection_marks, script_tag_repeat"
+      ],
+      "confidence": 0.95,
+      "evidenceAlertIds": [
+        "wi-01",
+        "wi-02"
+      ],
+      "effectiveFrom": "2026-09-27T00:13:01.000Z",
+      "expiresAt": "2026-09-27T01:13:20.000Z"
+    },
+    {
+      "ruleId": "web-injection.deny.203.0.113.18",
+      "action": "deny",
+      "match": {
+        "srcip": "203.0.113.18"
+      },
+      "reasons": [
+        "패턴 repeated_injection_marks, sql_injection_repeat, script_tag_repeat"
+      ],
+      "confidence": 0.98,
+      "evidenceAlertIds": [
+        "wi-05"
+      ],
+      "effectiveFrom": "2026-09-27T01:18:33.000Z",
+      "expiresAt": "2026-09-27T02:18:33.000Z"
+    },
+    {
+      "ruleId": "web-injection.deny.203.0.113.22",
+      "action": "deny",
+      "match": {
+        "srcip": "203.0.113.22"
+      },
+      "reasons": [
+        "패턴 repeated_injection_marks, sql_injection_repeat"
+      ],
+      "confidence": 0.95,
+      "evidenceAlertIds": [
+        "wi-08"
+      ],
+      "effectiveFrom": "2026-09-27T05:26:02.000Z",
+      "expiresAt": "2026-09-27T06:26:02.000Z"
+    }
+  ]
+}

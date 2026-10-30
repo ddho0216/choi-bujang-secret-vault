@@ -9,5 +9,11 @@
 | `failures_then_success` | 보너스 xdr-01 | T1110: 실패 뒤 성공, 규칙 수준 5~9, 건수가 적어 사용자 오타와 구분되지 않음 | `npm run test:xdr` 시험 경보 28건에서 alert (0.58) 확인. 심판의 판정이 아니라 로컬 확인 |
 | `lockout_retry` | 보너스 xdr-01 | T1110: 계정 잠금 뒤 재시도, 건수가 적어 단정하지 않음 | `npm run test:xdr` 시험 경보 28건에서 alert (0.62) 확인. 심판의 판정이 아니라 로컬 확인 |
 | `low_volume_failures` | 보너스 xdr-01 | T1110: 적은 건수(3~29)의 실패, 자동 대입과 사용자 실수를 구분할 수 없음 | `npm run test:xdr` 시험 경보 28건에서 alert (0.50) 확인. 심판의 판정이 아니라 로컬 확인 |
+| `repeated_injection_marks` | 보너스 xdr-02 | T1190: 규칙 수준 10 이상, 같은 주소에서 주입 표기가 8번 이상 반복 | `npm run test:xdr` 시험 경보 26건에서 block (확신도 0.88) 확인. 심판의 판정이 아니라 로컬 확인 |
+| `sql_injection_repeat` | 보너스 xdr-02 | T1190: 요청 인자에 SQL 구문을 이어 붙인 시도의 반복 | `npm run test:xdr` 시험 경보 26건에서 block (0.92 이상) 확인. 심판의 판정이 아니라 로컬 확인 |
+| `script_tag_repeat` | 보너스 xdr-02 | T1190: 요청 인자에 스크립트 태그를 넣는 시도의 반복 | `npm run test:xdr` 시험 경보 26건에서 block (0.92 이상) 확인. 심판의 판정이 아니라 로컬 확인 |
+| `path_traversal_repeat` | 보너스 xdr-02 | T1190: 경로를 거슬러 올라가는 ../ 표기의 반복 | `npm run test:xdr` 시험 경보 26건에서 block (0.92 이상) 확인. 심판의 판정이 아니라 로컬 확인 |
+| `payload_in_url_repeat` | 보너스 xdr-02 | T1190: 요청 주소를 디코딩하면 SQL 구문·스크립트 태그·../ 반복이 있고 5번 이상 반복(시험 문자열로만 확인, 경보 26건에는 해당 없음) | `npm run test:xdr` 시험 경보 26건에서 block (0.92) 확인. 심판의 판정이 아니라 로컬 확인 |
+| `single_injection_mark` | 보너스 xdr-02 | T1190: 주입처럼 보이는 표기가 1~3번뿐이라 수업 단어와 구분할 수 없음 | `npm run test:xdr` 시험 경보 26건에서 alert (0.50) 확인. 심판의 판정이 아니라 로컬 확인 |
 
 브라우저에서 버튼을 숨기는 것만으로 서버 접근이 차단됐다고 적지 마세요.

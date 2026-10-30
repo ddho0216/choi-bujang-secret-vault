@@ -73,7 +73,7 @@ Wazuh 모양의 시험 경보(`xdr/fixtures/brute-force.json`, 28건)에서 같�
 - `xdr/brute-force/read-alerts.mjs`: 시각·출발 주소·계정·규칙 수준·설명만 뽑는 확인용 모듈. 비밀값처럼 보이는 값은 `[가림]`으로 바꿔 출력하고 원본 경보는 고치지 않습니다. `decide.mjs`는 이 파일을 불러오지 않습니다.
 - `xdr/brute-force/patterns.json`: 패턴 다섯 개와 근거. MITRE ATT&CK T1110의 하위 기법(T1110.001 비밀번호 추측, T1110.003 스프레이)에 근거한 것만 넣었습니다.
 - `xdr/brute-force/decide.mjs`: `decide(alert)` 하나를 내보냅니다. `import` 없이 패턴을 파일 맨 위 상수로 옮겨 적었고, 파일 읽기·쓰기·네트워크 없이 파일 안에서만 계산합니다. 확신도가 0.85 이상이면 `block`, 0.5 이상이면 `alert`, 그 아래는 `record`입니다. 경보의 `data.count`가 문자열(`"48"`)로 오는 것을 숫자로 읽습니다.
-- `xdr/brute-force/respond.mjs`: `block`이면 거부 규칙을 `xdr/brute-force/deny-rules.json`에 적고, `block`·`alert`를 `xdr/alerts.log`에 한 줄씩 쌓습니다(같은 경보는 다시 쌓지 않음). 규칙에는 근거 경보 번호와 만료 시각(근거 경보 중 가장 늦은 시각 + 60분)이 있습니다. 같은 주소에 정상 경보가 있거나, 사설·루프백 주소이거나, 주소 형식이 이상하면 규칙을 만들지 않고 알림만 남깁니다.
+- `xdr/brute-force/respond.mjs`: `block`이면 거부 규칙을 `xdr/brute-force/deny-rules.json`에 적고, `block`·`alert`를 `xdr/alerts.log`에 한 줄씩 쌓습니다(같은 경보는 다시 쌓지 않음). 규칙에는 근거 경보 번호와 만료 시각(근거 경보 중 가장 늦은 시각 + 60분)이 있습니다. 같은 주소에 정상 경보가 있거나, 사설·루프백 주소이거나, 주소 형식이 이상하면 규칙을 만들지 않고 알림만 남깁니다. 알림·차단 로직은 `xdr/respond-core.mjs`를 xdr-02와 같이 씁니다.
 
 결과(시험 경보 28건): `block` 10건, `alert` 9건, `record` 9건. 정상으로 본 9건(T1110 표시 없음, 규칙 수준 3 이하)은 모두 `record`입니다.
 
@@ -90,4 +90,30 @@ npm run test:xdr
 - **ZTNA 판정기에 연결되지 않았습니다.** `src/decider.mjs`는 시작 틀이라 규칙 파일을 읽지 않고 모든 요청을 거부하며, 판정 요청(`docs/DECIDER_REQUEST.md`)에는 출발 주소가 없어 주소 기준 규칙을 맞출 수 없습니다. `deny-rules.json`은 넣을 규칙을 적어 둔 기록이고 `connectedToDecider: false`로 표시했습니다. 판정기의 기존 규칙은 고치지 않았습니다.
 - 정상과 애매한 경보를 가른 기준은 경보의 모양(규칙 수준, T1110 표시, 건수, 설명)입니다. 정답은 저장소에 없으므로 심판의 구분과 다를 수 있습니다.
 - 설명 문장의 단어(`여러 계정`, `잠금` 등)를 찾는 패턴은 문장이 바뀌면 맞지 않습니다.
+- `npm run test:xdr`은 로컬 시험이며 심판의 판정이 아닙니다.
+
+## 보너스 xdr-02: 웹 주입 공격
+
+웹 접근 경보(`xdr/fixtures/web-injection.json`, 26건)에서 SQL 구문·스크립트 태그·경로 거슬러 올라가기(`../`) 형태의 주입이 같은 주소에서 반복되는 것을 가려냅니다. 정답 파일은 저장소에 없고, 경보는 수업용 가상 자료입니다.
+
+- `xdr/web-injection/read-alerts.mjs`: 시각·출발 주소·계정·규칙 수준·설명만 뽑는 확인용 모듈(비밀값처럼 보이는 값은 `[가림]`). `decide.mjs`는 불러오지 않습니다.
+- `xdr/web-injection/patterns.json`: 패턴 여섯 개와 근거. MITRE ATT&CK T1190(공개된 응용 프로그램 악용)에 근거한 것만 넣었습니다.
+- `xdr/web-injection/decide.mjs`: `decide(alert)` 하나를 내보냅니다. `import` 없이 패턴을 파일 맨 위 상수로 옮겨 적었고, 파일·네트워크 없이 파일 안에서만 계산합니다. 확신도 0.85 이상이면 `block`, 0.5 이상이면 `alert`, 그 아래는 `record`입니다. `data.count`(문자열)를 숫자로 읽고, 요청 주소는 퍼센트 인코딩을 두 번까지 풀어서 봅니다.
+- `xdr/web-injection/respond.mjs`: `block`이면 거부 규칙을 `xdr/web-injection/deny-rules.json`에 적고, `block`·`alert`를 `xdr/alerts.log`에 쌓습니다. 안전장치(정상 경보가 있는 주소, 사설·루프백 주소, 이상한 주소는 차단 보류)는 `xdr/respond-core.mjs`에 있습니다.
+
+결과(시험 경보 26건): `block` 8건, `alert` 9건, `record` 9건. 정상으로 본 9건(T1190 표시 없음, 규칙 수준 3 이하)은 모두 `record`이고, 애매한 시도 9건(T1190, 수준 5~8, 1번)은 모두 `alert`입니다.
+
+다시 실행하기:
+
+```
+npm run xdr:run -- web-injection
+node xdr/web-injection/respond.mjs
+npm run test:xdr
+```
+
+### 한계
+
+- **ZTNA 판정기에 연결되지 않았습니다.** xdr-01과 같은 이유입니다. `src/decider.mjs`는 시작 틀이고 판정 요청에 출발 주소·주소(URL)가 없습니다. `deny-rules.json`은 `connectedToDecider: false`인 기록입니다.
+- 이 경보 묶음의 요청 주소(`data.url`)는 `doc-sql-chain` 같은 문서용 표기라서, 실제 판단은 설명 문장과 반복 횟수(8번 이상이면 반복)로 했습니다. 주소에 실제 주입 형태가 있을 때를 대비한 `payload_in_url_repeat`는 시험 문자열로만 확인했고 이 경보 26건에는 해당이 없습니다.
+- 정상과 애매한 경보를 가른 기준은 경보의 모양입니다. 정답은 저장소에 없으므로 심판의 구분과 다를 수 있습니다. 설명 문장의 단어(`SQL`, `스크립트`, `경로`)를 찾는 패턴은 문장이 바뀌면 맞지 않습니다.
 - `npm run test:xdr`은 로컬 시험이며 심판의 판정이 아닙니다.

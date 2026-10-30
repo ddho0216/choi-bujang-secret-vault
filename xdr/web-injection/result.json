@@ -1,0 +1,167 @@
+{
+  "schema": "aleph.xdr.result.v1",
+  "moduleKey": "web-injection",
+  "decisions": [
+    {
+      "alertId": "wi-01",
+      "action": "block",
+      "confidence": 0.95,
+      "reason": "패턴 repeated_injection_marks, sql_injection_repeat"
+    },
+    {
+      "alertId": "wi-02",
+      "action": "block",
+      "confidence": 0.95,
+      "reason": "패턴 repeated_injection_marks, script_tag_repeat"
+    },
+    {
+      "alertId": "wi-03",
+      "action": "block",
+      "confidence": 0.95,
+      "reason": "패턴 repeated_injection_marks, path_traversal_repeat"
+    },
+    {
+      "alertId": "wi-04",
+      "action": "block",
+      "confidence": 0.95,
+      "reason": "패턴 repeated_injection_marks, sql_injection_repeat"
+    },
+    {
+      "alertId": "wi-05",
+      "action": "block",
+      "confidence": 0.98,
+      "reason": "패턴 repeated_injection_marks, sql_injection_repeat, script_tag_repeat"
+    },
+    {
+      "alertId": "wi-06",
+      "action": "block",
+      "confidence": 0.88,
+      "reason": "패턴 repeated_injection_marks"
+    },
+    {
+      "alertId": "wi-07",
+      "action": "block",
+      "confidence": 0.95,
+      "reason": "패턴 repeated_injection_marks, path_traversal_repeat"
+    },
+    {
+      "alertId": "wi-08",
+      "action": "block",
+      "confidence": 0.95,
+      "reason": "패턴 repeated_injection_marks, sql_injection_repeat"
+    },
+    {
+      "alertId": "wi-09",
+      "action": "alert",
+      "confidence": 0.5,
+      "reason": "패턴 single_injection_mark"
+    },
+    {
+      "alertId": "wi-10",
+      "action": "alert",
+      "confidence": 0.5,
+      "reason": "패턴 single_injection_mark"
+    },
+    {
+      "alertId": "wi-11",
+      "action": "alert",
+      "confidence": 0.5,
+      "reason": "패턴 single_injection_mark"
+    },
+    {
+      "alertId": "wi-12",
+      "action": "alert",
+      "confidence": 0.5,
+      "reason": "패턴 single_injection_mark"
+    },
+    {
+      "alertId": "wi-13",
+      "action": "alert",
+      "confidence": 0.5,
+      "reason": "패턴 single_injection_mark"
+    },
+    {
+      "alertId": "wi-14",
+      "action": "alert",
+      "confidence": 0.5,
+      "reason": "패턴 single_injection_mark"
+    },
+    {
+      "alertId": "wi-15",
+      "action": "alert",
+      "confidence": 0.5,
+      "reason": "패턴 single_injection_mark"
+    },
+    {
+      "alertId": "wi-16",
+      "action": "alert",
+      "confidence": 0.5,
+      "reason": "패턴 single_injection_mark"
+    },
+    {
+      "alertId": "wi-17",
+      "action": "alert",
+      "confidence": 0.5,
+      "reason": "패턴 single_injection_mark"
+    },
+    {
+      "alertId": "wi-18",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "일치하는 패턴 없음"
+    },
+    {
+      "alertId": "wi-19",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "일치하는 패턴 없음"
+    },
+    {
+      "alertId": "wi-20",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "일치하는 패턴 없음"
+    },
+    {
+      "alertId": "wi-21",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "일치하는 패턴 없음"
+    },
+    {
+      "alertId": "wi-22",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "일치하는 패턴 없음"
+    },
+    {
+      "alertId": "wi-23",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "일치하는 패턴 없음"
+    },
+    {
+      "alertId": "wi-24",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "일치하는 패턴 없음"
+    },
+    {
+      "alertId": "wi-25",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "일치하는 패턴 없음"
+    },
+    {
+      "alertId": "wi-26",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "일치하는 패턴 없음"
+    }
+  ],
+  "counts": {
+    "block": 8,
+    "alert": 9,
+    "record": 9
+  }
+}

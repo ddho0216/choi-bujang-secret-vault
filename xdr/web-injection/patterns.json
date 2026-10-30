@@ -1,0 +1,68 @@
+{
+  "moduleKey": "web-injection",
+  "technique": "MITRE ATT&CK T1190 (Exploit Public-Facing Application)",
+  "thresholds": { "block": 0.85, "alert": 0.5 },
+  "corroborationBonus": 0.03,
+  "patterns": [
+    {
+      "name": "repeated_injection_marks",
+      "technique": "T1190",
+      "condition": "규칙 수준이 10 이상이고, 같은 주소에서 주입 표기가 8번 이상 반복된다.",
+      "evidence": "T1190은 공개된 웹 응용의 취약점을 이용하는 기법이다. 같은 표기가 이렇게 반복되면 사람의 입력이 아니라 도구가 취약점을 찾는 모습이다.",
+      "confidence": 0.88,
+      "when": { "mitre": "T1190", "minLevel": 10, "minCount": 8 }
+    },
+    {
+      "name": "sql_injection_repeat",
+      "technique": "T1190",
+      "condition": "위 조건에 더해, 설명이 요청 인자에 SQL 구문을 이어 붙인 시도라고 말한다.",
+      "evidence": "요청 인자에 SQL 구문을 이어 붙이는 것은 T1190의 전형적인 형태(SQL 주입)이고, 반복되면 자동 시도다.",
+      "confidence": 0.92,
+      "when": { "mitre": "T1190", "minLevel": 10, "minCount": 8, "anyPatterns": ["SQL", "데이터베이스 조회"] }
+    },
+    {
+      "name": "script_tag_repeat",
+      "technique": "T1190",
+      "condition": "위 조건에 더해, 설명이 스크립트 삽입 표기라고 말한다.",
+      "evidence": "요청 인자에 스크립트 태그를 넣는 시도(스크립트 주입)는 T1190에 속하고, 반복되면 자동 시도다.",
+      "confidence": 0.92,
+      "when": { "mitre": "T1190", "minLevel": 10, "minCount": 8, "anyPatterns": ["스크립트"] }
+    },
+    {
+      "name": "path_traversal_repeat",
+      "technique": "T1190",
+      "condition": "위 조건에 더해, 설명이 경로를 거슬러 올라가는 표기(../ 반복)라고 말한다.",
+      "evidence": "경로를 거슬러 올라가는 ../ 표기를 반복하는 것은 허용된 폴더 밖의 파일을 노리는 T1190 형태다.",
+      "confidence": 0.92,
+      "when": { "mitre": "T1190", "minLevel": 10, "minCount": 8, "anyPatterns": ["경로.*(거슬러|이탈)"] }
+    },
+    {
+      "name": "payload_in_url_repeat",
+      "technique": "T1190",
+      "condition": "T1190으로 표시됐고 5번 이상 반복됐으며, 요청 주소를 디코딩하면 SQL 구문·스크립트 태그·../ 반복이 들어 있다.",
+      "evidence": "설명 문장과 상관없이 요청 주소 자체에 주입 형태가 있으면 같은 신호이고, 반복되면 자동 시도다.",
+      "confidence": 0.92,
+      "when": {
+        "mitre": "T1190",
+        "minCount": 5,
+        "anyUrlPatterns": [
+          "\\bunion\\b[\\s\\S]{0,20}\\bselect\\b",
+          "\\bor\\b\\s+['\"]?\\d+['\"]?\\s*=\\s*['\"]?\\d+",
+          "['\"]\\s*(?:or|and)\\s+['\"]?\\w+['\"]?\\s*=",
+          ";\\s*(?:drop|delete|insert|update)\\b",
+          "<\\s*script",
+          "javascript:",
+          "(?:\\.\\.[/\\\\]){2,}"
+        ]
+      }
+    },
+    {
+      "name": "single_injection_mark",
+      "technique": "T1190",
+      "condition": "T1190으로 표시됐고 규칙 수준이 5 이상 9 이하이며, 주입처럼 보이는 표기가 1~3번뿐이다.",
+      "evidence": "T1190으로 표시됐지만 표기가 한두 번뿐이라 수업 단어나 사용자 입력과 구분할 수 없다. 막지 않고 알린다.",
+      "confidence": 0.5,
+      "when": { "mitre": "T1190", "minLevel": 5, "maxLevel": 9, "minCount": 1, "maxCount": 3 }
+    }
+  ]
+}
