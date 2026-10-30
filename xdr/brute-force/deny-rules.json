@@ -1,0 +1,155 @@
+{
+  "schema": "aleph.xdr.deny-rules.v1",
+  "moduleKey": "brute-force",
+  "connectedToDecider": false,
+  "ttlMinutes": 60,
+  "note": "넣을 규칙을 적어 둔 기록이다. src/decider.mjs 는 규칙 파일을 읽지 않고 판정 요청에 출발 주소가 없어 아직 연결되지 않았다.",
+  "rules": [
+    {
+      "ruleId": "brute-force.deny.192.0.2.18",
+      "action": "deny",
+      "match": {
+        "srcip": "192.0.2.18"
+      },
+      "reasons": [
+        "패턴 burst_failures"
+      ],
+      "confidence": 0.92,
+      "evidenceAlertIds": [
+        "bf-08"
+      ],
+      "effectiveFrom": "2026-09-27T04:10:02.000Z",
+      "expiresAt": "2026-09-27T05:10:02.000Z"
+    },
+    {
+      "ruleId": "brute-force.deny.192.0.2.30",
+      "action": "deny",
+      "match": {
+        "srcip": "192.0.2.30"
+      },
+      "reasons": [
+        "패턴 burst_failures"
+      ],
+      "confidence": 0.92,
+      "evidenceAlertIds": [
+        "bf-04"
+      ],
+      "effectiveFrom": "2026-09-27T00:20:11.000Z",
+      "expiresAt": "2026-09-27T01:20:11.000Z"
+    },
+    {
+      "ruleId": "brute-force.deny.198.51.100.8",
+      "action": "deny",
+      "match": {
+        "srcip": "198.51.100.8"
+      },
+      "reasons": [
+        "패턴 spray_many_accounts"
+      ],
+      "confidence": 0.9,
+      "evidenceAlertIds": [
+        "bf-09"
+      ],
+      "effectiveFrom": "2026-09-27T05:22:18.000Z",
+      "expiresAt": "2026-09-27T06:22:18.000Z"
+    },
+    {
+      "ruleId": "brute-force.deny.198.51.100.20",
+      "action": "deny",
+      "match": {
+        "srcip": "198.51.100.20"
+      },
+      "reasons": [
+        "패턴 burst_failures, spray_many_accounts"
+      ],
+      "confidence": 0.95,
+      "evidenceAlertIds": [
+        "bf-03"
+      ],
+      "effectiveFrom": "2026-09-27T00:14:02.000Z",
+      "expiresAt": "2026-09-27T01:14:02.000Z"
+    },
+    {
+      "ruleId": "brute-force.deny.198.51.100.44",
+      "action": "deny",
+      "match": {
+        "srcip": "198.51.100.44"
+      },
+      "reasons": [
+        "패턴 burst_failures"
+      ],
+      "confidence": 0.92,
+      "evidenceAlertIds": [
+        "bf-06"
+      ],
+      "effectiveFrom": "2026-09-27T02:02:15.000Z",
+      "expiresAt": "2026-09-27T03:02:15.000Z"
+    },
+    {
+      "ruleId": "brute-force.deny.203.0.113.10",
+      "action": "deny",
+      "match": {
+        "srcip": "203.0.113.10"
+      },
+      "reasons": [
+        "패턴 burst_failures",
+        "패턴 spray_many_accounts"
+      ],
+      "confidence": 0.92,
+      "evidenceAlertIds": [
+        "bf-01",
+        "bf-02"
+      ],
+      "effectiveFrom": "2026-09-27T00:12:01.000Z",
+      "expiresAt": "2026-09-27T01:12:40.000Z"
+    },
+    {
+      "ruleId": "brute-force.deny.203.0.113.15",
+      "action": "deny",
+      "match": {
+        "srcip": "203.0.113.15"
+      },
+      "reasons": [
+        "패턴 burst_failures"
+      ],
+      "confidence": 0.92,
+      "evidenceAlertIds": [
+        "bf-07"
+      ],
+      "effectiveFrom": "2026-09-27T02:05:40.000Z",
+      "expiresAt": "2026-09-27T03:05:40.000Z"
+    },
+    {
+      "ruleId": "brute-force.deny.203.0.113.21",
+      "action": "deny",
+      "match": {
+        "srcip": "203.0.113.21"
+      },
+      "reasons": [
+        "패턴 spray_many_accounts"
+      ],
+      "confidence": 0.9,
+      "evidenceAlertIds": [
+        "bf-05"
+      ],
+      "effectiveFrom": "2026-09-27T00:21:00.000Z",
+      "expiresAt": "2026-09-27T01:21:00.000Z"
+    },
+    {
+      "ruleId": "brute-force.deny.203.0.113.40",
+      "action": "deny",
+      "match": {
+        "srcip": "203.0.113.40"
+      },
+      "reasons": [
+        "패턴 burst_failures"
+      ],
+      "confidence": 0.92,
+      "evidenceAlertIds": [
+        "bf-10"
+      ],
+      "effectiveFrom": "2026-09-27T06:40:01.000Z",
+      "expiresAt": "2026-09-27T07:40:01.000Z"
+    }
+  ]
+}

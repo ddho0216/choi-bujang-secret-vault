@@ -65,3 +65,29 @@
 ## 시작 틀 메모
 
 `vercel.json`은 `public`을 배포하고 `npm run build`로 `public/aleph.json`을 만듭니다. `aleph.json`은 Vercel이 주는 저장소 소유자·이름, 커밋, 배포 주소를 담을 뿐이며, 이것만으로 저장소 소유나 방어 성공이 인정되지는 않습니다. `npm run build -- --local`은 이 파일을 만들지 않으므로 배포나 심판 접수를 증명하지 않습니다. `src/attack-check.mjs`는 `npm run bundle`이 실행하는 직접 점검이며 심판의 판정이 아닙니다. `src/decider.mjs`·`src/detect.mjs`의 로컬 시험도 반 엔진의 결과가 아닙니다.
+
+## 보너스 xdr-01: 무차별 로그인 공격
+
+Wazuh 모양의 시험 경보(`xdr/fixtures/brute-force.json`, 28건)에서 같은 주소의 로그인 실패가 몰린 공격을 가려냅니다. 정답 파일은 저장소에 없고, 경보는 수업용 가상 자료입니다.
+
+- `xdr/brute-force/read-alerts.mjs`: 시각·출발 주소·계정·규칙 수준·설명만 뽑는 확인용 모듈. 비밀값처럼 보이는 값은 `[가림]`으로 바꿔 출력하고 원본 경보는 고치지 않습니다. `decide.mjs`는 이 파일을 불러오지 않습니다.
+- `xdr/brute-force/patterns.json`: 패턴 다섯 개와 근거. MITRE ATT&CK T1110의 하위 기법(T1110.001 비밀번호 추측, T1110.003 스프레이)에 근거한 것만 넣었습니다.
+- `xdr/brute-force/decide.mjs`: `decide(alert)` 하나를 내보냅니다. `import` 없이 패턴을 파일 맨 위 상수로 옮겨 적었고, 파일 읽기·쓰기·네트워크 없이 파일 안에서만 계산합니다. 확신도가 0.85 이상이면 `block`, 0.5 이상이면 `alert`, 그 아래는 `record`입니다. 경보의 `data.count`가 문자열(`"48"`)로 오는 것을 숫자로 읽습니다.
+- `xdr/brute-force/respond.mjs`: `block`이면 거부 규칙을 `xdr/brute-force/deny-rules.json`에 적고, `block`·`alert`를 `xdr/alerts.log`에 한 줄씩 쌓습니다(같은 경보는 다시 쌓지 않음). 규칙에는 근거 경보 번호와 만료 시각(근거 경보 중 가장 늦은 시각 + 60분)이 있습니다. 같은 주소에 정상 경보가 있거나, 사설·루프백 주소이거나, 주소 형식이 이상하면 규칙을 만들지 않고 알림만 남깁니다.
+
+결과(시험 경보 28건): `block` 10건, `alert` 9건, `record` 9건. 정상으로 본 9건(T1110 표시 없음, 규칙 수준 3 이하)은 모두 `record`입니다.
+
+다시 실행하기:
+
+```
+npm run xdr:run -- brute-force
+node xdr/brute-force/respond.mjs
+npm run test:xdr
+```
+
+### 한계
+
+- **ZTNA 판정기에 연결되지 않았습니다.** `src/decider.mjs`는 시작 틀이라 규칙 파일을 읽지 않고 모든 요청을 거부하며, 판정 요청(`docs/DECIDER_REQUEST.md`)에는 출발 주소가 없어 주소 기준 규칙을 맞출 수 없습니다. `deny-rules.json`은 넣을 규칙을 적어 둔 기록이고 `connectedToDecider: false`로 표시했습니다. 판정기의 기존 규칙은 고치지 않았습니다.
+- 정상과 애매한 경보를 가른 기준은 경보의 모양(규칙 수준, T1110 표시, 건수, 설명)입니다. 정답은 저장소에 없으므로 심판의 구분과 다를 수 있습니다.
+- 설명 문장의 단어(`여러 계정`, `잠금` 등)를 찾는 패턴은 문장이 바뀌면 맞지 않습니다.
+- `npm run test:xdr`은 로컬 시험이며 심판의 판정이 아닙니다.

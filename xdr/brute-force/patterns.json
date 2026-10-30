@@ -1,0 +1,48 @@
+{
+  "moduleKey": "brute-force",
+  "technique": "MITRE ATT&CK T1110 (Brute Force)",
+  "thresholds": { "block": 0.85, "alert": 0.5 },
+  "corroborationBonus": 0.03,
+  "patterns": [
+    {
+      "name": "burst_failures",
+      "technique": "T1110.001",
+      "condition": "규칙 수준이 10 이상이고, 짧은 시간에 쌓인 로그인 실패가 30건 이상이다.",
+      "evidence": "T1110.001은 한 계정에 비밀번호를 반복해서 추측하는 기법이다. 짧은 시간에 실패가 이만큼 몰리면 사람의 실수가 아니라 자동 대입이다.",
+      "confidence": 0.92,
+      "when": { "mitre": "T1110", "minLevel": 10, "minCount": 30 }
+    },
+    {
+      "name": "spray_many_accounts",
+      "technique": "T1110.003",
+      "condition": "규칙 수준이 10 이상이고, 설명이 여러 계정에 같은 비밀번호를 연속으로 넣었다고 말한다.",
+      "evidence": "T1110.003은 비밀번호 하나를 여러 계정에 대입하는 스프레이 기법이다. 계정 잠금을 피하려고 계정마다 실패 횟수를 낮게 유지한다.",
+      "confidence": 0.9,
+      "when": { "mitre": "T1110", "minLevel": 10, "anyPatterns": ["여러 계정", "서로 다른 계정", "계정\\s*\\d+\\s*개", "계정 이름을 바꿔"] }
+    },
+    {
+      "name": "failures_then_success",
+      "technique": "T1110",
+      "condition": "규칙 수준이 5 이상 9 이하이고, 로그인 실패 뒤에 성공했다.",
+      "evidence": "T1110은 추측이 맞아야 끝난다. 실패 뒤 성공은 추측이 맞았다는 신호일 수 있지만, 건수가 적으면 사용자의 오타와 구분되지 않는다.",
+      "confidence": 0.58,
+      "when": { "mitre": "T1110", "minLevel": 5, "maxLevel": 9, "anyPatterns": ["(뒤|후)에?\\s*(그\\s*뒤\\s*)?성공"] }
+    },
+    {
+      "name": "lockout_retry",
+      "technique": "T1110",
+      "condition": "T1110으로 표시된 경보이고 규칙 수준이 5 이상이며, 계정 잠금 뒤에 실패를 다시 넣었다.",
+      "evidence": "T1110은 계정 잠금 정책을 피해 가며 추측을 이어 가는 행동을 포함한다. 잠금 뒤의 재시도는 그 신호가 될 수 있으나 건수가 적어 단정하지 않는다.",
+      "confidence": 0.62,
+      "when": { "mitre": "T1110", "minLevel": 5, "anyPatterns": ["잠금"] }
+    },
+    {
+      "name": "low_volume_failures",
+      "technique": "T1110",
+      "condition": "T1110으로 표시됐고 규칙 수준이 5 이상 9 이하이며, 로그인 실패가 3건 이상 29건 이하다.",
+      "evidence": "T1110으로 표시된 경보지만 실패 건수가 적어 자동 대입과 사용자 실수를 구분할 수 없다. 막지 않고 사람에게 알린다.",
+      "confidence": 0.5,
+      "when": { "mitre": "T1110", "minLevel": 5, "maxLevel": 9, "minCount": 3, "maxCount": 29 }
+    }
+  ]
+}
