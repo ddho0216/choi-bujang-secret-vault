@@ -142,7 +142,8 @@
 **자료 API**
 
 - 메모 API(`src/notes-api.mjs`): 검증된 사용자와 저장된 소유자(`owner_id`)를 한 질의에 함께 걸어 남의 메모는 404로 거부합니다. 요청 본문의 `role`·`roles`·`isInstructor`·`instructor`·`admin`류 표시는 믿지 않고 `403`(`ROLE_CLAIM_REJECTED`)으로 거부합니다.
-- 다른 구역과 알 수 없는 경로(`api/[...path].js`, 로직은 `src/zones-api.mjs`): 로그인하지 않으면 `401`, 강사 자료는 `403`(`instructor_only`), 반 공지는 읽기 `404`(`no_notice_data`)·쓰기 `403`(`notice_write_admin_only`), 그 밖은 `404`(`unknown_route`)입니다. 모두 JSON이고 자료가 들어 있지 않습니다.
+- 다른 구역과 알 수 없는 경로(`api/[zone].js`와 그 아래 `[id]`·`[a]`·`[b]` 파일(한 단계부터 네 단계까지), 로직은 `src/zones-api.mjs`와 `src/zones-function.mjs`): 로그인하지 않으면 `401`, 강사 자료는 `403`(`instructor_only`), 반 공지는 읽기 `404`(`no_notice_data`)·쓰기 `403`(`notice_write_admin_only`), 그 밖은 `404`(`unknown_route`)입니다. 모두 JSON이고 자료가 들어 있지 않습니다.
+- 단계별 파일로 나눈 이유: Vercel은 여러 단계를 한꺼번에 받는 `[...이름].js` 파일을 이 설정에서 한 단계만 받아서, 배포해 보니 `/api/instructor/x` 같은 두 단계 경로가 JSON이 아니라 기본 404 페이지로 나왔습니다. 다섯 단계 이상의 깊은 경로는 호스팅 서비스의 기본 404이며 자료가 없습니다.
 - 거부할 때마다 사유를 한 줄 기록합니다(서버 로그). 토큰·요청 본문·사용자 ID는 쓰지 않습니다.
 
 확인 순서:

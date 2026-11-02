@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { dirname, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { test } from 'node:test';
 import { createNotesApi } from '../src/notes-api.mjs';
 import { createZonesApi } from '../src/zones-api.mjs';
@@ -168,4 +170,14 @@ test('로그인하지 않은 요청과 소유자 변경 시도와 허용하지 �
   assert.equal((await call(handle, { method: 'GET' }, 'not-a-uuid')).code, 404);
   assert.deepEqual(logs.map(entry => entry.reason), ['no_valid_login', 'owner_change', 'method_not_allowed', 'invalid_id']);
   assert.equal(logs.some(entry => 'userId' in entry || 'token' in entry || 'body' in entry), false);
+});
+
+test('다른 구역을 JSON 으로 거부하는 서버 함수 파일이 한 단계부터 네 단계까지 있고, 모두 같은 함수를 쓴다', async () => {
+  const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+  const shared = (await import('../src/zones-function.mjs')).default;
+  assert.equal(typeof shared, 'function');
+  for (const file of ['api/[zone].js', 'api/[zone]/[id].js', 'api/[zone]/[id]/[a].js', 'api/[zone]/[id]/[a]/[b].js']) {
+    const loaded = await import(pathToFileURL(join(root, file)).href);
+    assert.equal(loaded.default, shared, file);
+  }
 });
