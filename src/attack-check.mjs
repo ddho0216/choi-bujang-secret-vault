@@ -102,8 +102,10 @@ export async function runAttackChecks(config) {
       // 6단계: 판정기(src/decider.mjs)를 이 컴퓨터에서 직접 불러 가상 요청을 넣어 본다.
       // 네트워크 요청이 아니고 심판의 판정도 아니다. 미등록 기기 공격은 심판이 확인한다.
       const { decide } = await import('./decider.mjs');
-      const registered = await decide({ requestId: randomUUID(), deviceRegistered: true });
-      const unregistered = await decide({ requestId: randomUUID(), deviceRegistered: false });
+      // 판정 요청은 서비스·메서드·경로·경로 모양을 항상 담는다. 점검 요청은 자기 메모 한 건 읽기 모양으로 보낸다.
+      const memoRead = { service: 'notes', method: 'GET', path: '/notes/demo', route: 'GET /notes/:id' };
+      const registered = await decide({ requestId: randomUUID(), deviceRegistered: true, ...memoRead });
+      const unregistered = await decide({ requestId: randomUUID(), deviceRegistered: false, ...memoRead });
       attempts.push(
         { attackId: 'device_rule_local', expected: '등록 기기의 가상 요청은 allow, 미등록 기기의 가상 요청은 deny와 device_not_registered',
           observed: `로컬 판정기 호출: 등록 기기 → ${registered.decision}/${registered.reasonCode}, 미등록 기기 → ${unregistered.decision}/${unregistered.reasonCode} (심판의 판정이 아님)` },
@@ -111,9 +113,9 @@ export async function runAttackChecks(config) {
       if (config.step >= 7) {
         // 7단계: 가상 사건을 판정기에 넣어 본다(로컬 호출이며 심판의 판정이 아니다).
         const stepUp = { verified: false, authAgeSeconds: null };
-        const unusual = { deviceRegistered: true, signals: { source: 'judge_fixture', region: 'foreign', network: 'unusual', hour: 3 },
+        const unusual = { ...memoRead, deviceRegistered: true, signals: { source: 'judge_fixture', region: 'foreign', network: 'unusual', hour: 3 },
           recentEvents: [{ kind: 'risk_signal', ageSeconds: 60, count: 20 }], stepUp };
-        const usual = { deviceRegistered: true, signals: { source: 'judge_fixture', region: 'local', network: 'usual', hour: 14 },
+        const usual = { ...memoRead, deviceRegistered: true, signals: { source: 'judge_fixture', region: 'local', network: 'usual', hour: 14 },
           recentEvents: [], stepUp };
         const flagged = await decide({ requestId: randomUUID(), ...unusual });
         const confirmed = await decide({ requestId: randomUUID(), ...unusual, stepUp: { verified: true, authAgeSeconds: 60 } });
@@ -143,7 +145,7 @@ export async function runAttackChecks(config) {
         const base = { deviceRegistered: true, signals: { source: 'judge_fixture', region: 'local', network: 'usual', hour: 14 },
           recentEvents: [], stepUp: { verified: false, authAgeSeconds: null } };
         const zone = (method, path, service, route) => decide({ requestId: randomUUID(), ...base, method, path, service, route });
-        const memoRead = await zone('GET', '/notes/demo', 'notes', 'GET /notes/:id');
+        const memoReadResult = await zone('GET', '/notes/demo', 'notes', 'GET /notes/:id');
         const memoList = await zone('GET', '/notes', 'notes', 'GET /notes');
         const noticeWrite = await zone('POST', '/notices', 'notices', 'POST /notices');
         const instructorRead = await zone('GET', '/instructor/x', 'instructor', 'GET /instructor/:id');
@@ -154,7 +156,7 @@ export async function runAttackChecks(config) {
           { attackId: 'anonymous_notice_write_api', expected: '로그인 없이 반 공지를 쓰려 하면 401 JSON 으로 거부',
             observed: `비로그인 PUT /api/notices/x ${refused(noticeWriteApi)}` },
           { attackId: 'zone_rules_local', expected: '자기 메모 한 건 읽기는 allow, 메모 전체 목록·반 공지 쓰기·강사 자료는 deny와 resource_not_allowed',
-            observed: `로컬 판정기 호출: GET /notes/:id → ${shown(memoRead)}, GET /notes → ${shown(memoList)}, POST /notices → ${shown(noticeWrite)}, GET /instructor/:id → ${shown(instructorRead)} (심판의 판정이 아님)` },
+            observed: `로컬 판정기 호출: GET /notes/:id → ${shown(memoReadResult)}, GET /notes → ${shown(memoList)}, POST /notices → ${shown(noticeWrite)}, GET /instructor/:id → ${shown(instructorRead)} (심판의 판정이 아님)` },
           { attackId: 'other_zone_authenticated_api', expected: '로그인한 사용자가 다른 구역 자료를 직접 API 로 요청하면 거부',
             observed: '미실행: 로그인 토큰이 필요해 이 점검에서는 요청하지 않음. 로컬 시험(가짜 표)으로만 확인함' },
         );
