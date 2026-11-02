@@ -64,8 +64,8 @@ const withSignals = (patch, extra = {}) => fresh(normal, { signals: { source: 'j
 const composite = (patch = {}, extra = {}) => fresh(suspicious, { signals: { ...suspicious.signals, ...patch }, ...extra });
 const decision = async request => { const r = await decide(request); assertValidResponse(request, r); return r; };
 
-test('RULE_IDS 에는 구현한 규칙 두 개만 있고, 기기 규칙을 그대로 유지한다', async () => {
-  assert.deepEqual([...RULE_IDS], ['device_registered', 'step_up_required']);
+test('RULE_IDS 에는 구현한 규칙 세 개만 있고, 기기 규칙을 그대로 유지한다', async () => {
+  assert.deepEqual([...RULE_IDS], ['device_registered', 'resource_zone', 'step_up_required']);
   const unregistered = await decision(fresh(normal, { deviceRegistered: false }));
   assert.deepEqual([unregistered.decision, unregistered.reasonCode, unregistered.ruleIds], ['deny', 'device_not_registered', ['device_registered']]);
 });
@@ -74,12 +74,12 @@ test('정해진 복합 이상 사건은 step_up, 정상 사건은 allow', async 
   const unusual = await decision(suspicious);
   assert.deepEqual([unusual.decision, unusual.reasonCode, unusual.ruleIds], ['step_up', 'step_up_required', ['step_up_required']]);
   const ordinary = await decision(normal);
-  assert.deepEqual([ordinary.decision, ordinary.reasonCode, ordinary.ruleIds], ['allow', 'approved', ['device_registered']]);
+  assert.deepEqual([ordinary.decision, ordinary.reasonCode, ordinary.ruleIds], ['allow', 'approved', ['device_registered', 'resource_zone']]);
 });
 
 test('계약에 맞게 다시 확인한 복합 이상 사건은 allow, 모양이 틀린 확인은 믿지 않는다', async () => {
   const verified = await decision(composite({}, { stepUp: { verified: true, authAgeSeconds: 60 } }));
-  assert.deepEqual([verified.decision, verified.ruleIds], ['allow', ['device_registered', 'step_up_required']]);
+  assert.deepEqual([verified.decision, verified.ruleIds], ['allow', ['device_registered', 'resource_zone', 'step_up_required']]);
   for (const age of [0, 900]) assert.equal((await decision(composite({}, { stepUp: { verified: true, authAgeSeconds: age } }))).decision, 'allow', String(age));
   for (const stepUp of [{ verified: true, authAgeSeconds: null }, { verified: true, authAgeSeconds: 901 }, { verified: true, authAgeSeconds: -1 },
     { verified: true, authAgeSeconds: '60' }, { verified: true, authAgeSeconds: 59.5 }, { verified: 'true', authAgeSeconds: 60 },

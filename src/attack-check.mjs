@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { SUPABASE_PUBLISHABLE_KEY as PUBLISHABLE_KEY } from './supabase-public.mjs';
 
 export async function runAttackChecks(config) {
-  if (![1, 2, 3, 4, 5, 6, 7].includes(config.step)) {
+  if (![1, 2, 3, 4, 5, 6, 7, 8].includes(config.step)) {
     throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
   }
   let app;
@@ -133,6 +133,38 @@ export async function runAttackChecks(config) {
             observed: `로컬 판정기 호출: 위조 헤더를 덧붙인 복합 이상 가상 사건 → ${shown(forged)} (심판의 판정이 아님)` },
           { attackId: 'relogin_block_not_run', expected: '확인 전 자료를 막고 새 로그인 뒤 요청을 다시 판정',
             observed: '미실행: 엔진이 같은 로그인으로 다시 로그인한 시각을 검증하는 계약을 이 저장소에서 찾지 못했고, 자료실 서버가 판정기를 호출하지 않음' },
+        );
+      }
+      if (config.step >= 8) {
+        // 8단계: 로그인 없이 다른 구역을 직접 부르면 JSON 으로 거부되어야 한다(실제 요청).
+        const isJson = res => (res.headers.get('content-type') ?? '').includes('json');
+        const instructorApi = await anonymous('/api/instructor/x');
+        const noticeWriteApi = await anonymous('/api/notices/x', { method: 'PUT', headers: jsonHeaders, body: JSON.stringify({ title: 'anonymous' }) });
+        const refused = res => (res.status === 401 && isJson(res) ? `거부됨 (HTTP 401, JSON)` : `거부되지 않음 (HTTP ${res.status}${isJson(res) ? ', JSON' : ', JSON 아님'})`);
+        // 판정기에 가상 요청을 넣어 구역 규칙을 본다(로컬 호출이며 심판의 판정이 아니다).
+        const base = { deviceRegistered: true, signals: { source: 'judge_fixture', region: 'local', network: 'usual', hour: 14 },
+          recentEvents: [], stepUp: { verified: false, authAgeSeconds: null } };
+        const zone = (method, path, service, route) => decide({ requestId: randomUUID(), ...base, method, path, service, route });
+        const memoRead = await zone('GET', '/notes/demo', 'notes', 'GET /notes/:id');
+        const memoList = await zone('GET', '/notes', 'notes', 'GET /notes');
+        const noticeWrite = await zone('POST', '/notices', 'notices', 'POST /notices');
+        const instructorRead = await zone('GET', '/instructor/x', 'instructor', 'GET /instructor/:id');
+        const shown = response => `${response.decision}/${response.reasonCode}`;
+        attempts.push(
+          { attackId: 'anonymous_instructor_api', expected: '로그인 없이 강사 자료 경로를 부르면 401 JSON 으로 거부',
+            observed: `비로그인 GET /api/instructor/x ${refused(instructorApi)}` },
+          { attackId: 'anonymous_notice_write_api', expected: '로그인 없이 반 공지를 쓰려 하면 401 JSON 으로 거부',
+            observed: `비로그인 PUT /api/notices/x ${refused(noticeWriteApi)}` },
+          { attackId: 'zone_memo_read_local', expected: '자기 메모 한 건 읽기는 allow',
+            observed: `로컬 판정기 호출: GET /notes/:id → ${shown(memoRead)} (심판의 판정이 아님)` },
+          { attackId: 'zone_memo_list_local', expected: '메모 전체 목록은 deny 와 resource_not_allowed',
+            observed: `로컬 판정기 호출: GET /notes → ${shown(memoList)} (심판의 판정이 아님)` },
+          { attackId: 'zone_notice_write_local', expected: '반 공지 쓰기는 deny 와 resource_not_allowed',
+            observed: `로컬 판정기 호출: POST /notices → ${shown(noticeWrite)} (심판의 판정이 아님)` },
+          { attackId: 'zone_instructor_local', expected: '강사 자료는 deny 와 resource_not_allowed',
+            observed: `로컬 판정기 호출: GET /instructor/:id → ${shown(instructorRead)} (심판의 판정이 아님)` },
+          { attackId: 'other_zone_authenticated_api', expected: '로그인한 사용자가 다른 구역 자료를 직접 API 로 요청하면 거부',
+            observed: '미실행: 로그인 토큰이 필요해 이 점검에서는 요청하지 않음. 로컬 시험(가짜 표)으로만 확인함' },
         );
       }
     }

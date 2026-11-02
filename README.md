@@ -13,6 +13,7 @@
 | 5 | 자료 요청을 서버 한곳으로 모음: 브라우저의 직접 자료 호출 점검(없음), 학습 DB의 PUBLIC·anon·authenticated 직접 권한 회수, `originalApiUrl` 기입. 가점: 로그인·로그아웃도 서버 함수(`/api/login`, `/api/logout`)로 옮겨 화면 코드에서 공개 키 제거 | 구현·DB 적용 확인. 권한 조회에서 `anon`·`authenticated`는 모두 `false`, `service_role`은 `true`. 서버 로그인 코드는 실제 Supabase에 틀린 계정으로 실행해 연결을 확인했고, 배포 뒤 로그인과 메모 추가·수정·삭제 동작은 사용자가 직접 확인했다고 알려 줌(캡처는 받지 못함) |
 | 6 | 판정기 `src/decider.mjs`에 기기 등록 규칙 `device_registered` 추가: `deviceRegistered`가 `true`인 기기만 허용하고, 아니면 `deny`와 이유 코드 `device_not_registered`로 거부 | 구현. `npm run decider:test` 통과(가상 요청 연습이며 심판 통과 증거가 아님). 미등록 기기 공격은 심판이 확인 |
 | 7 | 판정기에 규칙 `step_up_required` 추가: 평소와 다른 시각·처음 보는 네트워크·갑자기 몰린 사건이 함께 있으면 `step_up`(추가 확인), 다시 확인한 요청은 `allow`. 접속 정보는 엔진이 붙인 출처만 믿는 입력 검사 추가 | 구현. `npm run decider:test`(4항목)·`npm run fixture:7`·`npm run test:decider` 통과(가상 사건 연습이며 심판 통과 증거가 아님). **실제 재로그인 확인과 자료 차단은 미실행** |
+| 8 | 자원 구역(메모·반 공지·강사 자료)과 자원 ID. 판정기에 규칙 `resource_zone` 추가(메모는 자료 ID 하나를 고르는 경로만, 반 공지는 읽기만, 강사 자료와 알 수 없는 경로는 거부). 자료 API는 본문의 `role`을 믿지 않고 거부 사유를 기록하며, 다른 구역은 JSON으로 거부 | 구현. `npm run decider:test`·`npm run test:decider`·`npm run test:notes` 통과(가상 요청·가짜 표 기준이며 심판 통과 증거가 아님). 이 자료실에는 메모만 있어 공지·강사 자료는 데이터 없이 구역만 정의함. 로그인한 사용자의 다른 구역 직접 요청은 **미실행** |
 
 ## 현재 기능
 
@@ -29,7 +30,7 @@
 - 직접 권한 회수(`supabase/notes-revoke-direct.sql`, 로컬 기록): `public.notes`의 `PUBLIC`·`anon`·`authenticated` 권한을 모두 회수했습니다. 이제 `notes`는 서버 함수(서버 전용 키, `service_role`)만 읽고 씁니다. 화면 코드는 Supabase를 직접 부르지 않고 로그인은 `/api/login`, 자료는 `/api/notes`로만 요청합니다(직접 자료 호출은 점검 결과 없음). `aleph.config.json`의 `originalApiUrl`은 쿼리 없는 원본 경로 `https://meupslbrbesjtyuwpske.supabase.co/rest/v1/notes`이며, 이 경로를 `anon` 키로 직접 부르면 `permission denied`(HTTP 401)입니다.
 - `vercel.json`의 `headers`로 모든 응답에 `X-Content-Type-Options: nosniff`를 붙입니다. 확인: `curl -sI https://choi-bujang-secret-vault-hailey17.vercel.app/ | grep -i x-content-type-options`
 - 공개 `/data.json`과 저장소의 `data.json`은 없앴습니다. 빌드(`npm run build`)는 `public/aleph.json`(저장소·커밋·배포 주소)만 만듭니다.
-- 판정기(`src/decider.mjs`): 규칙 두 개. `device_registered`는 요청의 `deviceRegistered`가 `true`인 기기만 통과시키고 아니면 `deny`·`device_not_registered`입니다. `step_up_required`는 복합 이상 사건을 `step_up`으로 보냅니다(7단계 절 참고). 요청 이름은 `docs/DECIDER_REQUEST.md`의 것만 읽고 `request.role`·`identity`·`device`는 읽지 않습니다.
+- 판정기(`src/decider.mjs`): 규칙 세 개. `device_registered`는 요청의 `deviceRegistered`가 `true`인 기기만 통과시키고 아니면 `deny`·`device_not_registered`입니다. `resource_zone`은 허용 목록에 없는 구역·경로·메서드를 `deny`·`resource_not_allowed`로 거부합니다(8단계 절). `step_up_required`는 복합 이상 사건을 `step_up`으로 보냅니다(7단계 절). 요청 이름은 `docs/DECIDER_REQUEST.md`의 것만 읽고 역할·`identity`·`device` 같은 필드는 읽지 않습니다.
 
 ## 다시 실행하는 방법
 
@@ -109,6 +110,55 @@
 - 실제 경로에서는 `signals.source`가 `none`이고 지역·네트워크가 `unknown`이라, 이 규칙은 심판의 가상 사건에서만 동작합니다. 실제 위치·네트워크를 가려내는 기능이 아닙니다.
 - `step_up` 뒤에 재인증 화면으로 보내고 새 요청에 `stepUp`을 채우는 일은 엔진의 몫이며 이 저장소에서 확인하지 못했습니다.
 - 허용 응답의 이유 코드 `approved`와 `step_up_required`는 계약 문서·시험 코드에서 가져왔고, 운영 등록부의 허용 코드 목록은 확인하지 못했습니다.
+
+## 8단계: 자료마다 갈 수 있는 구역을 나눕니다
+
+**이 자료실에 실제로 있는 자료는 메모뿐입니다.** 반 공지와 강사 자료는 데이터가 없고, 강사 권한을 저장한 곳도 없습니다(아무도 강사가 아닙니다). 그래서 구역·자원 ID·거부 동작만 구현했고, 없는 자료를 만들지 않았습니다. 브라우저 화면과 자료실 주소는 바꾸지 않았습니다.
+
+**구역과 자원 ID** (`src/decider.mjs`의 `RESOURCE_ZONES`, `resourceFor`. 판정기와 서버 API가 같은 정의를 씁니다)
+
+| 구역 | 서비스 | 경로 | 자원 ID |
+|---|---|---|---|
+| 메모 | `notes` | `/notes`, `/notes/:id` | `memo:*`, `memo:<id>` |
+| 반 공지 | `notices` | `/notices`, `/notices/:id` | `class_notice:*`, `class_notice:<id>` |
+| 강사 자료 | `instructor` | `/instructor` 이하 | `instructor_material:*`, `instructor_material:<id>` |
+
+같은 `<id>`여도 구역이 다르면 자원 ID가 다릅니다. 서버 API는 모든 응답에 `X-Resource-Id`로 자원 ID를 붙입니다(로그인하지 않은 요청과 거부된 요청도). 맨 앞의 `/api`는 떼고 해석합니다.
+
+**판정기 규칙 `resource_zone`** (허용 목록에 없는 요청은 모두 `deny`·`resource_not_allowed`)
+
+| 구역 | 허용 | 거부 |
+|---|---|---|
+| 메모 | `GET·PUT·DELETE /notes/:id` (자료 ID 하나를 고르는 경로) | `/notes` 전체 목록·추가, 그 밖의 메서드·깊이 |
+| 반 공지 | `GET /notices`, `GET /notices/:id` | 쓰기(`POST·PUT·PATCH·DELETE`)는 누구에게나 |
+| 강사 자료 | 없음 | 모두 |
+
+- 판단은 `service`, `method`, `path`, `route`가 모두 같은 구역·같은 모양일 때만 허용합니다. 쿼리(`queryLength`, `querySha256`)는 읽지 않으므로 쿼리로 기능을 고를 수 없습니다.
+- 자료 ID 형식은 좁히지 않습니다(UUID가 아니어도 허용). `:id`와 같은 깊이에 `export` 같은 기능 경로를 두지 않았고, 두면 그 이름이 자료 ID로 읽힙니다.
+- 순서는 기기 규칙 → 구역 규칙 → 복합 이상 규칙입니다. 막힌 구역은 복합 이상이어도 `step_up`이 아니라 바로 `deny`입니다.
+- 메모의 주인 비교는 판정기에 넣지 않았고 서버 API가 합니다. 강사의 공지 수정은 판정기에 역할이 없어 서버의 관리 경로 몫인데, 이 자료실에는 그 경로를 만들지 않았습니다.
+- `aleph.config.json`의 `allowedRoutes`는 판정기가 허용하는 `GET·PUT·DELETE /api/notes/:id` 세 개로 줄였습니다.
+
+**자료 API**
+
+- 메모 API(`src/notes-api.mjs`): 검증된 사용자와 저장된 소유자(`owner_id`)를 한 질의에 함께 걸어 남의 메모는 404로 거부합니다. 요청 본문의 `role`·`roles`·`isInstructor`·`instructor`·`admin`류 표시는 믿지 않고 `403`(`ROLE_CLAIM_REJECTED`)으로 거부합니다.
+- 다른 구역과 알 수 없는 경로(`api/[...path].js`, 로직은 `src/zones-api.mjs`): 로그인하지 않으면 `401`, 강사 자료는 `403`(`instructor_only`), 반 공지는 읽기 `404`(`no_notice_data`)·쓰기 `403`(`notice_write_admin_only`), 그 밖은 `404`(`unknown_route`)입니다. 모두 JSON이고 자료가 들어 있지 않습니다.
+- 거부할 때마다 사유를 한 줄 기록합니다(서버 로그). 토큰·요청 본문·사용자 ID는 쓰지 않습니다.
+
+확인 순서:
+
+1. `npm run decider:test`: 네 줄이 모두 `통과`여야 합니다(정상 요청은 메모 한 건 읽기이므로 구역 규칙을 통과합니다).
+2. `npm run test:decider`: 자원 ID, 구역 규칙(메모·공지·강사 자료·알 수 없는 경로), 이전 규칙 유지를 확인합니다.
+3. `npm run test:notes`: 본인 정상 요청 유지, 남의 메모 거부, 본문 `role` 거부, 다른 구역 JSON 거부, 거부 사유 기록을 확인합니다.
+4. 배포 뒤 로그인하지 않고 `curl -si https://choi-bujang-secret-vault-hailey17.vercel.app/api/instructor/x`를 실행하면 `401`과 JSON `{"error":"UNAUTHENTICATED","reason":"no_valid_login"}`이 나와야 합니다.
+
+한계:
+
+- 위 시험은 가상 요청과 가짜 표를 쓴 로컬 시험이며 심판의 판정이 아닙니다. **로그인한 사용자가 다른 구역 자료를 직접 API로 요청하는 점검은 로그인 토큰이 필요해 실행하지 않았습니다.**
+- 메모의 `PUT`·`DELETE`는 카드가 허용 여부를 말하지 않아 "자료 ID 하나를 고르는 경로"로 보고 허용했습니다(주인 비교는 API). 거부해야 하면 `ZONE_RULES.memo`에서 두 줄을 빼면 됩니다.
+- 판정기는 메모 전체 목록과 추가(`GET·POST /notes`)를 거부하지만, 화면은 판정기를 거치지 않아 목록·추가를 그대로 씁니다. `allowedRoutes`가 판정기가 허용하는 경로만 담는 것과 실제 서버가 내주는 경로가 다른 이유입니다.
+- `resource_not_allowed`와 `approved`는 계약 문서·시험 코드에서 정한 이유 코드입니다. `resource_not_allowed`가 운영 등록부의 허용 코드인지는 이 저장소에서 확인하지 못했습니다.
+- 서버 로그의 거부 기록은 호스팅 서비스의 로그 화면에서만 볼 수 있고, 이 저장소에는 남지 않습니다.
 
 ## 가상 메모가 새 파일에 없는지 확인하는 절차
 

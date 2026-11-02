@@ -17,5 +17,6 @@
 | `single_injection_mark` | 보너스 xdr-02 | T1190: 주입처럼 보이는 표기가 1~3번뿐이라 수업 단어와 구분할 수 없음 | `npm run test:xdr` 시험 경보 26건에서 alert (0.50) 확인. 심판의 판정이 아니라 로컬 확인 |
 | `device_registered` | 6단계 | 등록하지 않은 기기의 요청(`deviceRegistered`가 `true`가 아님) | `npm run decider:test`에서 등록 기기 `allow`, 미등록 가상 요청 `deny`·`device_not_registered` 확인. 심판의 판정이 아니라 로컬 확인 |
 | `step_up_required` | 7단계 | 평소와 다른 시각(23~5시)·처음 보는 네트워크(`unusual`)·최근 5분 사건 10건 이상이 함께 있는 가상 사건(막지 않고 추가 확인) | `npm run decider:test`(복합 이상 `step_up`, 다시 확인 `allow`), `npm run fixture:7`, `npm run test:decider`. 심판의 판정이 아니라 로컬 확인. 실제 재로그인 확인·자료 차단은 미실행 |
+| `resource_zone` | 8단계 | 허용 목록에 없는 구역·경로·메서드(메모 전체 목록·추가, 반 공지 쓰기, 강사 자료 전체, 알 수 없는 경로) | `npm run test:decider`(구역 시험 10개)·`npm run decider:test`. 메모는 자료 ID 하나를 고르는 경로만, 반 공지는 읽기만 허용. 심판의 판정이 아니라 로컬 확인 |
 
 브라우저에서 버튼을 숨기는 것만으로 서버 접근이 차단됐다고 적지 마세요.
