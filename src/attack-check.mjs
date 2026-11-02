@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { SUPABASE_PUBLISHABLE_KEY as PUBLISHABLE_KEY } from './supabase-public.mjs';
 
 export async function runAttackChecks(config) {
-  if (![1, 2, 3, 4, 5, 6].includes(config.step)) {
+  if (![1, 2, 3, 4, 5, 6, 7].includes(config.step)) {
     throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
   }
   let app;
@@ -110,6 +110,31 @@ export async function runAttackChecks(config) {
         { attackId: 'device_unregistered_local', expected: '미등록 기기의 가상 요청은 deny와 device_not_registered',
           observed: `로컬 판정기 호출: 미등록 기기 가상 요청 → ${unregistered.decision}/${unregistered.reasonCode} (심판의 판정이 아님)` },
       );
+      if (config.step >= 7) {
+        // 7단계: 가상 사건을 판정기에 넣어 본다(로컬 호출이며 심판의 판정이 아니다).
+        const stepUp = { verified: false, authAgeSeconds: null };
+        const unusual = { deviceRegistered: true, signals: { source: 'judge_fixture', region: 'foreign', network: 'unusual', hour: 3 },
+          recentEvents: [{ kind: 'risk_signal', ageSeconds: 60, count: 20 }], stepUp };
+        const usual = { deviceRegistered: true, signals: { source: 'judge_fixture', region: 'local', network: 'usual', hour: 14 },
+          recentEvents: [], stepUp };
+        const flagged = await decide({ requestId: randomUUID(), ...unusual });
+        const confirmed = await decide({ requestId: randomUUID(), ...unusual, stepUp: { verified: true, authAgeSeconds: 60 } });
+        const ordinary = await decide({ requestId: randomUUID(), ...usual });
+        const forged = await decide({ requestId: randomUUID(), ...unusual, headers: { 'x-network': 'usual', 'x-hour': '14' }, geo: { region: 'local' } });
+        const shown = response => `${response.decision}/${response.reasonCode}`;
+        attempts.push(
+          { attackId: 'composite_anomaly_local', expected: '복합 이상 가상 사건은 step_up과 step_up_required',
+            observed: `로컬 판정기 호출: 복합 이상 가상 사건 → ${shown(flagged)} (심판의 판정이 아님)` },
+          { attackId: 'usual_access_local', expected: '정상 가상 사건은 allow',
+            observed: `로컬 판정기 호출: 정상 가상 사건 → ${shown(ordinary)} (심판의 판정이 아님)` },
+          { attackId: 'confirmed_access_local', expected: '다시 확인한 복합 이상 가상 사건은 allow',
+            observed: `로컬 판정기 호출: 다시 확인한 복합 이상 가상 사건 → ${shown(confirmed)} (심판의 판정이 아님)` },
+          { attackId: 'forged_header_local', expected: '위조한 헤더를 덧붙여도 복합 이상 판정이 바뀌지 않음',
+            observed: `로컬 판정기 호출: 위조 헤더를 덧붙인 복합 이상 가상 사건 → ${shown(forged)} (심판의 판정이 아님)` },
+          { attackId: 'relogin_block_not_run', expected: '확인 전 자료를 막고 새 로그인 뒤 요청을 다시 판정',
+            observed: '미실행: 엔진이 같은 로그인으로 다시 로그인한 시각을 검증하는 계약을 이 저장소에서 찾지 못했고, 자료실 서버가 판정기를 호출하지 않음' },
+        );
+      }
     }
     return attempts;
   }

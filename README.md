@@ -12,6 +12,7 @@
 | 4 | 서버 API의 소유자 검사(검증한 사용자 ID와 `owner_id` 비교)와 Supabase의 GRANT·RLS를 본인 행만 허용하도록 적용 | 완료·배포(`ed3c069`, `7918c83`). DB 정책 네 개를 Supabase에서 실행하고 `pg_policies` 조회로 확인, `anon` 키 직접 요청 거부 확인. 배포 서버에서 A·B 토큰으로 직접 확인한 점검은 **미실행** |
 | 5 | 자료 요청을 서버 한곳으로 모음: 브라우저의 직접 자료 호출 점검(없음), 학습 DB의 PUBLIC·anon·authenticated 직접 권한 회수, `originalApiUrl` 기입. 가점: 로그인·로그아웃도 서버 함수(`/api/login`, `/api/logout`)로 옮겨 화면 코드에서 공개 키 제거 | 구현·DB 적용 확인. 권한 조회에서 `anon`·`authenticated`는 모두 `false`, `service_role`은 `true`. 서버 로그인 코드는 실제 Supabase에 틀린 계정으로 실행해 연결을 확인했고, 배포 뒤 로그인과 메모 추가·수정·삭제 동작은 사용자가 직접 확인했다고 알려 줌(캡처는 받지 못함) |
 | 6 | 판정기 `src/decider.mjs`에 기기 등록 규칙 `device_registered` 추가: `deviceRegistered`가 `true`인 기기만 허용하고, 아니면 `deny`와 이유 코드 `device_not_registered`로 거부 | 구현. `npm run decider:test` 통과(가상 요청 연습이며 심판 통과 증거가 아님). 미등록 기기 공격은 심판이 확인 |
+| 7 | 판정기에 규칙 `step_up_required` 추가: 평소와 다른 시각·처음 보는 네트워크·갑자기 몰린 사건이 함께 있으면 `step_up`(추가 확인), 다시 확인한 요청은 `allow`. 접속 정보는 엔진이 붙인 출처만 믿는 입력 검사 추가 | 구현. `npm run decider:test`(4항목)·`npm run fixture:7`·`npm run test:decider` 통과(가상 사건 연습이며 심판 통과 증거가 아님). **실제 재로그인 확인과 자료 차단은 미실행** |
 
 ## 현재 기능
 
@@ -28,7 +29,7 @@
 - 직접 권한 회수(`supabase/notes-revoke-direct.sql`, 로컬 기록): `public.notes`의 `PUBLIC`·`anon`·`authenticated` 권한을 모두 회수했습니다. 이제 `notes`는 서버 함수(서버 전용 키, `service_role`)만 읽고 씁니다. 화면 코드는 Supabase를 직접 부르지 않고 로그인은 `/api/login`, 자료는 `/api/notes`로만 요청합니다(직접 자료 호출은 점검 결과 없음). `aleph.config.json`의 `originalApiUrl`은 쿼리 없는 원본 경로 `https://meupslbrbesjtyuwpske.supabase.co/rest/v1/notes`이며, 이 경로를 `anon` 키로 직접 부르면 `permission denied`(HTTP 401)입니다.
 - `vercel.json`의 `headers`로 모든 응답에 `X-Content-Type-Options: nosniff`를 붙입니다. 확인: `curl -sI https://choi-bujang-secret-vault-hailey17.vercel.app/ | grep -i x-content-type-options`
 - 공개 `/data.json`과 저장소의 `data.json`은 없앴습니다. 빌드(`npm run build`)는 `public/aleph.json`(저장소·커밋·배포 주소)만 만듭니다.
-- 판정기(`src/decider.mjs`): 규칙 `device_registered` 하나. 요청의 `deviceRegistered`가 `true`일 때만 `allow`(이유 코드 `approved`)이고, `false`·값 없음·`true`가 아닌 값은 `deny`와 `device_not_registered`입니다. 요청 이름은 `docs/DECIDER_REQUEST.md`의 것만 읽고, `request.role`·`identity`·`device`는 읽지 않습니다.
+- 판정기(`src/decider.mjs`): 규칙 두 개. `device_registered`는 요청의 `deviceRegistered`가 `true`인 기기만 통과시키고 아니면 `deny`·`device_not_registered`입니다. `step_up_required`는 복합 이상 사건을 `step_up`으로 보냅니다(7단계 절 참고). 요청 이름은 `docs/DECIDER_REQUEST.md`의 것만 읽고 `request.role`·`identity`·`device`는 읽지 않습니다.
 
 ## 다시 실행하는 방법
 
@@ -70,7 +71,44 @@
 - `decider:test`는 가상 요청 연습이며 심판의 판정이 아닙니다. 미등록 기기 공격은 심판이 확인합니다.
 - 허용 응답의 이유 코드 `approved`는 `docs/DECIDER_REQUEST.md`의 응답 예시에서 가져왔습니다. 운영 등록부의 허용 코드 목록은 이 저장소에서 확인하지 못했습니다.
 - 실제 릴레이는 미등록 기기를 판정기보다 먼저 막습니다. 이 규칙은 그 앞단 검사를 되돌리지 못하고, `deviceRegistered` 값 자체는 엔진이 정한 값을 믿을 뿐 판정기가 따로 검증하지 않습니다.
-- 7단계의 `step_up` 규칙은 아직 만들지 않았습니다. `npm run fixture:7`은 7단계 연습이라 지금은 통과하지 않는 것이 정상입니다.
+
+## 7단계: 평소와 다른 접속은 다시 확인합니다
+
+판정기가 복합 이상 사건을 막지 않고 **추가 본인 확인(`step_up`)** 으로 보냅니다. 브라우저 화면과 자료실 주소는 바꾸지 않았습니다.
+
+**입력 검사(`readSignals`)**: 접속 정보(`request.signals`)는 엔진이 심판의 가상 사건에 붙이는 출처 `judge_fixture`일 때만 믿습니다. 실제 경로의 `none`이나 알 수 없는 출처는 근거로 쓰지 않습니다. 지역·시각·네트워크가 없거나 모양이 다르면 `null`로 두고 정상값으로 채우지 않습니다. 브라우저가 보낸 헤더·위치(`request.headers`, `geo`, `clientIp` 등)는 읽지 않으므로, 위조한 값이 믿는 접속 정보로 승격되지 않습니다(시험으로 확인).
+
+**규칙 `step_up_required`**: 아래 세 가지가 **모두** 맞을 때만 `step_up`(이유 코드 `step_up_required`)입니다.
+
+| 조건 | 기준(수업용 가정) |
+|---|---|
+| 평소와 다른 시각 | 엔진이 준 `signals.hour`가 23시~5시 |
+| 처음 보는 네트워크 | `signals.network`가 `unusual`(`unknown`은 근거가 아님) |
+| 갑자기 몰린 사건 | `recentEvents` 가운데 최근 5분(`ageSeconds` 300 이하)의 `count` 합이 10 이상 |
+
+- 지역(`signals.region`)은 판정에 쓰지 않습니다. 지역 하나만으로 막지 않기 위해서입니다. `deny`나 영구 차단은 하지 않고, 사유는 이유 코드와 규칙 이름(`step_up_required`)으로 남습니다.
+- 다시 확인한 요청은 `allow`입니다. 계약에 맞는 모양(`stepUp.verified`가 `true`이고 `authAgeSeconds`가 0~900 사이 정수)일 때만 믿고, 모양이 틀린 확인은 믿지 않습니다.
+- 기기 규칙이 먼저입니다. 등록하지 않은 기기는 복합 이상 여부와 상관없이 `deny`·`device_not_registered`입니다.
+- 시각·네트워크·사건 기준은 실제 사용자의 평소 기록이 아니라 수업용 가정값입니다.
+
+**다시 로그인 계약 확인 결과**
+
+- 있는 것: 요청의 `stepUp {verified, authAgeSeconds}`(`docs/DECIDER_REQUEST.md`)와, `step_up` 결정이 엔진에 추가 본인 확인을 요청한다는 설명입니다.
+- 없는 것: 엔진이 **같은 내 로그인으로 다시 로그인한 시각**을 검증해 준다는 문서는 이 저장소에 없습니다. `authAgeSeconds`는 나이(초)일 뿐 같은 계정의 새 로그인이라는 설명이 없습니다. 이 자료실의 서버 함수도 판정기를 호출하지 않습니다.
+- 그래서 **가상 사건 규칙만 시험했고, 실제 자료 차단과 새 로그인 뒤 재판정은 미실행**입니다. 토큰 원문은 어디에도 기록하지 않았습니다.
+
+확인 순서:
+
+1. `npm run decider:test`: 네 줄이 모두 `통과`여야 합니다(등록 기기의 정상 요청, 미등록 기기의 가상 요청, 복합 이상 접속, 다시 확인한 복합 이상 접속).
+2. `npm run fixture:7`: `정상 사건: allow`, `복합 이상 사건: step_up`이 나와야 합니다.
+3. `npm run test:decider`: 입력 검사, 세 조건의 경계값, 모양이 틀린 입력을 확인하는 시험이 모두 통과해야 합니다.
+
+한계:
+
+- 위 시험은 가상 사건 연습이며 심판의 판정이 아닙니다.
+- 실제 경로에서는 `signals.source`가 `none`이고 지역·네트워크가 `unknown`이라, 이 규칙은 심판의 가상 사건에서만 동작합니다. 실제 위치·네트워크를 가려내는 기능이 아닙니다.
+- `step_up` 뒤에 재인증 화면으로 보내고 새 요청에 `stepUp`을 채우는 일은 엔진의 몫이며 이 저장소에서 확인하지 못했습니다.
+- 허용 응답의 이유 코드 `approved`와 `step_up_required`는 계약 문서·시험 코드에서 가져왔고, 운영 등록부의 허용 코드 목록은 확인하지 못했습니다.
 
 ## 가상 메모가 새 파일에 없는지 확인하는 절차
 
