@@ -18,5 +18,6 @@
 | `device_registered` | 6단계 | 등록하지 않은 기기의 요청(`deviceRegistered`가 `true`가 아님) | `npm run decider:test`에서 등록 기기 `allow`, 미등록 가상 요청 `deny`·`device_not_registered` 확인. 심판의 판정이 아니라 로컬 확인 |
 | `step_up_required` | 7단계 | 평소와 다른 시각(23~5시)·처음 보는 네트워크(`unusual`)·최근 5분 사건 10건 이상이 함께 있는 가상 사건(막지 않고 추가 확인) | `npm run decider:test`(복합 이상 `step_up`, 다시 확인 `allow`), `npm run fixture:7`, `npm run test:decider`. 심판의 판정이 아니라 로컬 확인. 실제 재로그인 확인·자료 차단은 미실행 |
 | `resource_zone` | 8단계 | 허용 목록에 없는 구역·경로·메서드(메모 전체 목록·추가, 반 공지 쓰기, 강사 자료 전체, 알 수 없는 경로) | `npm run test:decider`(구역 시험 10개)·`npm run decider:test`. 메모는 자료 ID 하나를 고르는 경로만, 반 공지는 읽기만 허용. 심판의 판정이 아니라 로컬 확인 |
+| `burst_read` | 9단계 | 같은 가상 사용자(`identity.sub`)의 `GET`이 어느 10분 구간에서든 120건을 넘는 폭주 조회(회수 제안) | `npm run detect:test` 6항목, `npm run test:detect`. 가상 사건 연습이며 심판의 판정도 실제 접속 회수도 아님 |
 
 브라우저에서 버튼을 숨기는 것만으로 서버 접근이 차단됐다고 적지 마세요.

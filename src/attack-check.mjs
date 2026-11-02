@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { SUPABASE_PUBLISHABLE_KEY as PUBLISHABLE_KEY } from './supabase-public.mjs';
 
 export async function runAttackChecks(config) {
-  if (![1, 2, 3, 4, 5, 6, 7, 8].includes(config.step)) {
+  if (![1, 2, 3, 4, 5, 6, 7, 8, 9].includes(config.step)) {
     throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
   }
   let app;
@@ -125,12 +125,8 @@ export async function runAttackChecks(config) {
         attempts.push(
           { attackId: 'composite_anomaly_local', expected: '복합 이상 가상 사건은 step_up과 step_up_required',
             observed: `로컬 판정기 호출: 복합 이상 가상 사건 → ${shown(flagged)} (심판의 판정이 아님)` },
-          { attackId: 'usual_access_local', expected: '정상 가상 사건은 allow',
-            observed: `로컬 판정기 호출: 정상 가상 사건 → ${shown(ordinary)} (심판의 판정이 아님)` },
-          { attackId: 'confirmed_access_local', expected: '다시 확인한 복합 이상 가상 사건은 allow',
-            observed: `로컬 판정기 호출: 다시 확인한 복합 이상 가상 사건 → ${shown(confirmed)} (심판의 판정이 아님)` },
-          { attackId: 'forged_header_local', expected: '위조한 헤더를 덧붙여도 복합 이상 판정이 바뀌지 않음',
-            observed: `로컬 판정기 호출: 위조 헤더를 덧붙인 복합 이상 가상 사건 → ${shown(forged)} (심판의 판정이 아님)` },
+          { attackId: 'step_up_cases_local', expected: '정상 가상 사건은 allow, 다시 확인한 복합 이상은 allow, 위조 헤더를 덧붙인 복합 이상은 그대로 step_up',
+            observed: `로컬 판정기 호출: 정상 → ${shown(ordinary)}, 다시 확인한 복합 이상 → ${shown(confirmed)}, 위조 헤더를 덧붙인 복합 이상 → ${shown(forged)} (심판의 판정이 아님)` },
           { attackId: 'relogin_block_not_run', expected: '확인 전 자료를 막고 새 로그인 뒤 요청을 다시 판정',
             observed: '미실행: 엔진이 같은 로그인으로 다시 로그인한 시각을 검증하는 계약을 이 저장소에서 찾지 못했고, 자료실 서버가 판정기를 호출하지 않음' },
         );
@@ -159,6 +155,21 @@ export async function runAttackChecks(config) {
             observed: `로컬 판정기 호출: GET /notes/:id → ${shown(memoReadResult)}, GET /notes → ${shown(memoList)}, POST /notices → ${shown(noticeWrite)}, GET /instructor/:id → ${shown(instructorRead)} (심판의 판정이 아님)` },
           { attackId: 'other_zone_authenticated_api', expected: '로그인한 사용자가 다른 구역 자료를 직접 API 로 요청하면 거부',
             observed: '미실행: 로그인 토큰이 필요해 이 점검에서는 요청하지 않음. 로컬 시험(가짜 표)으로만 확인함' },
+        );
+      }
+      if (config.step >= 9) {
+        // 9단계: 가상 조회 사건을 탐지 함수에 넣어 본다(로컬 호출이며 심판의 판정도, 실제 접속 회수도 아니다).
+        const { detect } = await import('./detect.mjs');
+        const START = Date.UTC(2026, 9, 1);
+        const reads = (count, sub = 'learner_fixture') => Array.from({ length: count }, (_, index) => ({
+          at: new Date(START + index * 2000).toISOString(), method: 'GET', identity: { sub } }));
+        const seen = result => (result.action === 'observe' ? 'observe' : `${result.action}/${result.reasonCode}`);
+        const two = [...reads(100), ...reads(100, 'other_fixture')];
+        attempts.push(
+          { attackId: 'burst_read_local', expected: '10분 안 120건은 observe, 121건·200건은 propose_revocation과 burst_read, 두 사용자 각 100건은 observe',
+            observed: `로컬 탐지 호출: 120건 → ${seen(detect(reads(120)))}, 121건 → ${seen(detect(reads(121)))}, 200건 → ${seen(detect(reads(200)))}, 두 사용자 각 100건 → ${seen(detect(two))} (가상 사건이며 심판의 판정이 아님)` },
+          { attackId: 'revocation_not_run', expected: '운영 반 엔진이 검증한 사건을 전달하고 회수 제안을 집행',
+            observed: '미실행: 운영 반 엔진의 사건 전달과 접속 회수는 연결·시험하지 않음. detect()는 회수 제안을 돌려줄 뿐 접속을 끊지 않음' },
         );
       }
     }
