@@ -105,10 +105,8 @@ export async function runAttackChecks(config) {
       const registered = await decide({ requestId: randomUUID(), deviceRegistered: true });
       const unregistered = await decide({ requestId: randomUUID(), deviceRegistered: false });
       attempts.push(
-        { attackId: 'device_registered_local', expected: '등록 기기의 가상 요청은 allow',
-          observed: `로컬 판정기 호출: 등록 기기 가상 요청 → ${registered.decision}/${registered.reasonCode} (심판의 판정이 아님)` },
-        { attackId: 'device_unregistered_local', expected: '미등록 기기의 가상 요청은 deny와 device_not_registered',
-          observed: `로컬 판정기 호출: 미등록 기기 가상 요청 → ${unregistered.decision}/${unregistered.reasonCode} (심판의 판정이 아님)` },
+        { attackId: 'device_rule_local', expected: '등록 기기의 가상 요청은 allow, 미등록 기기의 가상 요청은 deny와 device_not_registered',
+          observed: `로컬 판정기 호출: 등록 기기 → ${registered.decision}/${registered.reasonCode}, 미등록 기기 → ${unregistered.decision}/${unregistered.reasonCode} (심판의 판정이 아님)` },
       );
       if (config.step >= 7) {
         // 7단계: 가상 사건을 판정기에 넣어 본다(로컬 호출이며 심판의 판정이 아니다).
@@ -155,14 +153,8 @@ export async function runAttackChecks(config) {
             observed: `비로그인 GET /api/instructor/x ${refused(instructorApi)}` },
           { attackId: 'anonymous_notice_write_api', expected: '로그인 없이 반 공지를 쓰려 하면 401 JSON 으로 거부',
             observed: `비로그인 PUT /api/notices/x ${refused(noticeWriteApi)}` },
-          { attackId: 'zone_memo_read_local', expected: '자기 메모 한 건 읽기는 allow',
-            observed: `로컬 판정기 호출: GET /notes/:id → ${shown(memoRead)} (심판의 판정이 아님)` },
-          { attackId: 'zone_memo_list_local', expected: '메모 전체 목록은 deny 와 resource_not_allowed',
-            observed: `로컬 판정기 호출: GET /notes → ${shown(memoList)} (심판의 판정이 아님)` },
-          { attackId: 'zone_notice_write_local', expected: '반 공지 쓰기는 deny 와 resource_not_allowed',
-            observed: `로컬 판정기 호출: POST /notices → ${shown(noticeWrite)} (심판의 판정이 아님)` },
-          { attackId: 'zone_instructor_local', expected: '강사 자료는 deny 와 resource_not_allowed',
-            observed: `로컬 판정기 호출: GET /instructor/:id → ${shown(instructorRead)} (심판의 판정이 아님)` },
+          { attackId: 'zone_rules_local', expected: '자기 메모 한 건 읽기는 allow, 메모 전체 목록·반 공지 쓰기·강사 자료는 deny와 resource_not_allowed',
+            observed: `로컬 판정기 호출: GET /notes/:id → ${shown(memoRead)}, GET /notes → ${shown(memoList)}, POST /notices → ${shown(noticeWrite)}, GET /instructor/:id → ${shown(instructorRead)} (심판의 판정이 아님)` },
           { attackId: 'other_zone_authenticated_api', expected: '로그인한 사용자가 다른 구역 자료를 직접 API 로 요청하면 거부',
             observed: '미실행: 로그인 토큰이 필요해 이 점검에서는 요청하지 않음. 로컬 시험(가짜 표)으로만 확인함' },
         );
