@@ -1,9 +1,10 @@
 // The student changes this check as each stage adds an attack to the same app.
 // Never return tokens, private keys, real names, or note bodies.
+import { randomUUID } from 'node:crypto';
 import { SUPABASE_PUBLISHABLE_KEY as PUBLISHABLE_KEY } from './supabase-public.mjs';
 
 export async function runAttackChecks(config) {
-  if (![1, 2, 3, 4, 5].includes(config.step)) {
+  if (![1, 2, 3, 4, 5, 6].includes(config.step)) {
     throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
   }
   let app;
@@ -96,6 +97,19 @@ export async function runAttackChecks(config) {
       attempts.push({ attackId: 'screen_has_no_public_key', expected: '첫 화면 응답에 Supabase 공개 키가 없어야 함',
         observed: !screen.ok ? `첫 화면을 읽지 못함 (HTTP ${screen.status})`
           : keyPattern.test(screenText) ? '첫 화면 응답에 키 문자열이 보임' : '첫 화면 응답에 키 문자열이 보이지 않음' });
+    }
+    if (config.step >= 6) {
+      // 6단계: 판정기(src/decider.mjs)를 이 컴퓨터에서 직접 불러 가상 요청을 넣어 본다.
+      // 네트워크 요청이 아니고 심판의 판정도 아니다. 미등록 기기 공격은 심판이 확인한다.
+      const { decide } = await import('./decider.mjs');
+      const registered = await decide({ requestId: randomUUID(), deviceRegistered: true });
+      const unregistered = await decide({ requestId: randomUUID(), deviceRegistered: false });
+      attempts.push(
+        { attackId: 'device_registered_local', expected: '등록 기기의 가상 요청은 allow',
+          observed: `로컬 판정기 호출: 등록 기기 가상 요청 → ${registered.decision}/${registered.reasonCode} (심판의 판정이 아님)` },
+        { attackId: 'device_unregistered_local', expected: '미등록 기기의 가상 요청은 deny와 device_not_registered',
+          observed: `로컬 판정기 호출: 미등록 기기 가상 요청 → ${unregistered.decision}/${unregistered.reasonCode} (심판의 판정이 아님)` },
+      );
     }
     return attempts;
   }

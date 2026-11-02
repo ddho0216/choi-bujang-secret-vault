@@ -2,7 +2,7 @@
 // 모듈마다 xdr/<moduleKey>/respond.mjs 가 자기 decide 와 파일 위치를 넣어 이 파일을 쓴다.
 // decide.mjs 는 이 파일을 불러오지 않는다(판단만 돌려주고 파일 쓰기·연결은 하지 않는다).
 //
-// 주의: 이 저장소의 src/decider.mjs 는 시작 틀이라 규칙 파일을 읽지 않고, 판정 요청(docs/DECIDER_REQUEST.md)에는
+// 주의: 이 저장소의 src/decider.mjs 는 기기 등록 규칙뿐이라 거부 규칙 파일을 읽지 않고, 판정 요청(docs/DECIDER_REQUEST.md)에는
 // 출발 주소도 없다. 그래서 deny-rules.json 은 "넣을 규칙을 적어 둔 기록"이고, 판정기에 연결되지는 않았다.
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';

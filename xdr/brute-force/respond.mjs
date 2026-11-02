@@ -1,6 +1,6 @@
 // 알림과 차단(무차별 로그인): 로직은 xdr/respond-core.mjs 와 같이 쓰고, 이 모듈의 판단과 파일 위치만 넣는다.
 // decide.mjs 는 판단만 돌려주고, 파일 쓰기와 규칙 기록은 이 파일만 한다.
-// 이 저장소의 src/decider.mjs 는 시작 틀이라 규칙 파일을 읽지 않고 판정 요청에 출발 주소가 없어, 판정기에 연결하지 않았다.
+// 이 저장소의 src/decider.mjs 는 기기 등록 규칙뿐이라 거부 규칙 파일을 읽지 않고 판정 요청에 출발 주소가 없어, 판정기에 연결하지 않았다.
 import { readFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';

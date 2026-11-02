@@ -10,7 +10,8 @@
 | 2 | 메모를 코드 밖(Supabase 표)으로 옮기고 `api/notes.js`를 통해 읽음. 보안 헤더(`nosniff`) 추가 | 완료·배포 확인(`b823ec1`, `4678663`) |
 | 3 | Supabase Auth 이메일·비밀번호 로그인·로그아웃 화면, 로그인한 사용자의 메모 추가·수정·삭제 화면과 서버 API(서버가 토큰 검증), `aleph.config.json`에 `identityProvider`·`allowedRoutes` | 배포 완료(`7b9e987`). 로그인해 추가한 메모가 A의 `owner_id`로 저장된 것은 DB 조회로 확인 |
 | 4 | 서버 API의 소유자 검사(검증한 사용자 ID와 `owner_id` 비교)와 Supabase의 GRANT·RLS를 본인 행만 허용하도록 적용 | 완료·배포(`ed3c069`, `7918c83`). DB 정책 네 개를 Supabase에서 실행하고 `pg_policies` 조회로 확인, `anon` 키 직접 요청 거부 확인. 배포 서버에서 A·B 토큰으로 직접 확인한 점검은 **미실행** |
-| 5 | 자료 요청을 서버 한곳으로 모음: 브라우저의 직접 자료 호출 점검(없음), 학습 DB의 PUBLIC·anon·authenticated 직접 권한 회수, `originalApiUrl` 기입. 가점: 로그인·로그아웃도 서버 함수(`/api/login`, `/api/logout`)로 옮겨 화면 코드에서 공개 키 제거 | 구현·DB 적용 확인. 권한 조회에서 `anon`·`authenticated`는 모두 `false`, `service_role`은 `true`. 서버 로그인 코드는 실제 Supabase에 틀린 계정으로 실행해 연결을 확인했고, 로그인 성공 흐름은 배포 뒤 사람이 확인 |
+| 5 | 자료 요청을 서버 한곳으로 모음: 브라우저의 직접 자료 호출 점검(없음), 학습 DB의 PUBLIC·anon·authenticated 직접 권한 회수, `originalApiUrl` 기입. 가점: 로그인·로그아웃도 서버 함수(`/api/login`, `/api/logout`)로 옮겨 화면 코드에서 공개 키 제거 | 구현·DB 적용 확인. 권한 조회에서 `anon`·`authenticated`는 모두 `false`, `service_role`은 `true`. 서버 로그인 코드는 실제 Supabase에 틀린 계정으로 실행해 연결을 확인했고, 배포 뒤 로그인과 메모 추가·수정·삭제 동작은 사용자가 직접 확인했다고 알려 줌(캡처는 받지 못함) |
+| 6 | 판정기 `src/decider.mjs`에 기기 등록 규칙 `device_registered` 추가: `deviceRegistered`가 `true`인 기기만 허용하고, 아니면 `deny`와 이유 코드 `device_not_registered`로 거부 | 구현. `npm run decider:test` 통과(가상 요청 연습이며 심판 통과 증거가 아님). 미등록 기기 공격은 심판이 확인 |
 
 ## 현재 기능
 
@@ -27,6 +28,7 @@
 - 직접 권한 회수(`supabase/notes-revoke-direct.sql`, 로컬 기록): `public.notes`의 `PUBLIC`·`anon`·`authenticated` 권한을 모두 회수했습니다. 이제 `notes`는 서버 함수(서버 전용 키, `service_role`)만 읽고 씁니다. 화면 코드는 Supabase를 직접 부르지 않고 로그인은 `/api/login`, 자료는 `/api/notes`로만 요청합니다(직접 자료 호출은 점검 결과 없음). `aleph.config.json`의 `originalApiUrl`은 쿼리 없는 원본 경로 `https://meupslbrbesjtyuwpske.supabase.co/rest/v1/notes`이며, 이 경로를 `anon` 키로 직접 부르면 `permission denied`(HTTP 401)입니다.
 - `vercel.json`의 `headers`로 모든 응답에 `X-Content-Type-Options: nosniff`를 붙입니다. 확인: `curl -sI https://choi-bujang-secret-vault-hailey17.vercel.app/ | grep -i x-content-type-options`
 - 공개 `/data.json`과 저장소의 `data.json`은 없앴습니다. 빌드(`npm run build`)는 `public/aleph.json`(저장소·커밋·배포 주소)만 만듭니다.
+- 판정기(`src/decider.mjs`): 규칙 `device_registered` 하나. 요청의 `deviceRegistered`가 `true`일 때만 `allow`(이유 코드 `approved`)이고, `false`·값 없음·`true`가 아닌 값은 `deny`와 `device_not_registered`입니다. 요청 이름은 `docs/DECIDER_REQUEST.md`의 것만 읽고, `request.role`·`identity`·`device`는 읽지 않습니다.
 
 ## 다시 실행하는 방법
 
@@ -46,6 +48,29 @@
 - **미실행 점검**: 배포 서버에서 B의 토큰으로 A의 메모를 읽고·고치고·지우는 요청은 로그인 토큰이 필요해 실행하지 않았습니다. 로컬 시험(가짜 표)으로만 확인했습니다. 화면에서 A·B가 각자 자기 메모만 보는지는 사람이 직접 확인합니다.
 - 시험 한계: `npm run test:notes` 같은 로컬 시험은 가짜 표로 돌린 것입니다. 실제 Supabase와 A·B의 로그인 토큰으로 확인한 결과가 아닙니다. 배포 후 A·B로 직접 확인해야 합니다.
 - **옛 공개 노출은 해소되지 않았습니다.** 첫 커밋 `ce0237b`에는 `data.json`과 `public/data.json`이 그대로 있고, 옛 배포 주소와 옛 미리보기 배포에도 메모가 남아 있을 수 있습니다. 그 기록이 남는 한 과거 노출이 해소됐다고 말할 수 없습니다.
+
+## 6단계: 등록한 기기만
+
+판정기가 요청의 `deviceRegistered`만 보고 등록하지 않은 기기를 거부합니다. 브라우저 화면과 자료실 주소는 바꾸지 않았고, 새 키·인증서 파일도 만들지 않았습니다.
+
+확인 순서:
+
+1. 저장소를 새로 받았다면 `npm install`을 합니다.
+2. `npm run decider:test`를 실행합니다.
+3. 아래 두 줄이 `통과`로 나와야 합니다. 첫째는 등록 기기의 정상 요청이 `allow`, 둘째는 `deviceRegistered: false`인 가상 요청이 `deny`와 `device_not_registered`로 나오는 것입니다.
+
+```
+통과 · 등록 기기의 정상 요청
+통과 · 미등록 기기의 가상 요청
+이 명령은 가상 요청으로 연습하며 심판 통과 증거가 아닙니다.
+```
+
+한계:
+
+- `decider:test`는 가상 요청 연습이며 심판의 판정이 아닙니다. 미등록 기기 공격은 심판이 확인합니다.
+- 허용 응답의 이유 코드 `approved`는 `docs/DECIDER_REQUEST.md`의 응답 예시에서 가져왔습니다. 운영 등록부의 허용 코드 목록은 이 저장소에서 확인하지 못했습니다.
+- 실제 릴레이는 미등록 기기를 판정기보다 먼저 막습니다. 이 규칙은 그 앞단 검사를 되돌리지 못하고, `deviceRegistered` 값 자체는 엔진이 정한 값을 믿을 뿐 판정기가 따로 검증하지 않습니다.
+- 7단계의 `step_up` 규칙은 아직 만들지 않았습니다. `npm run fixture:7`은 7단계 연습이라 지금은 통과하지 않는 것이 정상입니다.
 
 ## 가상 메모가 새 파일에 없는지 확인하는 절차
 
@@ -87,7 +112,7 @@ npm run test:xdr
 
 ### 한계
 
-- **ZTNA 판정기에 연결되지 않았습니다.** `src/decider.mjs`는 시작 틀이라 규칙 파일을 읽지 않고 모든 요청을 거부하며, 판정 요청(`docs/DECIDER_REQUEST.md`)에는 출발 주소가 없어 주소 기준 규칙을 맞출 수 없습니다. `deny-rules.json`은 넣을 규칙을 적어 둔 기록이고 `connectedToDecider: false`로 표시했습니다. 판정기의 기존 규칙은 고치지 않았습니다.
+- **ZTNA 판정기에 연결되지 않았습니다.** `src/decider.mjs`는 6단계 기기 등록 규칙만 있어 거부 규칙 파일을 읽지 않으며, 판정 요청(`docs/DECIDER_REQUEST.md`)에는 출발 주소가 없어 주소 기준 규칙을 맞출 수 없습니다. `deny-rules.json`은 넣을 규칙을 적어 둔 기록이고 `connectedToDecider: false`로 표시했습니다. 판정기의 기존 규칙은 고치지 않았습니다.
 - 정상과 애매한 경보를 가른 기준은 경보의 모양(규칙 수준, T1110 표시, 건수, 설명)입니다. 정답은 저장소에 없으므로 심판의 구분과 다를 수 있습니다.
 - 설명 문장의 단어(`여러 계정`, `잠금` 등)를 찾는 패턴은 문장이 바뀌면 맞지 않습니다.
 - `npm run test:xdr`은 로컬 시험이며 심판의 판정이 아닙니다.
@@ -113,7 +138,7 @@ npm run test:xdr
 
 ### 한계
 
-- **ZTNA 판정기에 연결되지 않았습니다.** xdr-01과 같은 이유입니다. `src/decider.mjs`는 시작 틀이고 판정 요청에 출발 주소·주소(URL)가 없습니다. `deny-rules.json`은 `connectedToDecider: false`인 기록입니다.
+- **ZTNA 판정기에 연결되지 않았습니다.** xdr-01과 같은 이유입니다. `src/decider.mjs`는 기기 등록 규칙뿐이고 판정 요청에 출발 주소·주소(URL)가 없습니다. `deny-rules.json`은 `connectedToDecider: false`인 기록입니다.
 - 이 경보 묶음의 요청 주소(`data.url`)는 `doc-sql-chain` 같은 문서용 표기라서, 실제 판단은 설명 문장과 반복 횟수(8번 이상이면 반복)로 했습니다. 주소에 실제 주입 형태가 있을 때를 대비한 `payload_in_url_repeat`는 시험 문자열로만 확인했고 이 경보 26건에는 해당이 없습니다.
 - 정상과 애매한 경보를 가른 기준은 경보의 모양입니다. 정답은 저장소에 없으므로 심판의 구분과 다를 수 있습니다. 설명 문장의 단어(`SQL`, `스크립트`, `경로`)를 찾는 패턴은 문장이 바뀌면 맞지 않습니다.
 - `npm run test:xdr`은 로컬 시험이며 심판의 판정이 아닙니다.
