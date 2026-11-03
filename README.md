@@ -16,6 +16,7 @@
 | 8 | 자원 구역(메모·반 공지·강사 자료)과 자원 ID. 판정기에 규칙 `resource_zone` 추가(메모는 자료 ID 하나를 고르는 경로만, 반 공지는 읽기만, 강사 자료와 알 수 없는 경로는 거부). 자료 API는 본문의 `role`을 믿지 않고 거부 사유를 기록하며, 다른 구역은 JSON으로 거부 | 구현. `npm run decider:test`·`npm run test:decider`·`npm run test:notes` 통과(가상 요청·가짜 표 기준이며 심판 통과 증거가 아님). 이 자료실에는 메모만 있어 공지·강사 자료는 데이터 없이 구역만 정의함. 로그인한 사용자의 다른 구역 직접 요청은 **미실행** |
 | 9 | 탐지 함수 `src/detect.mjs`: 사건에서 `at`·`method`·`identity.sub` 세 값만 읽고, 규칙 `burst_read`(같은 사용자의 `GET`이 어느 10분 구간에서든 120건 초과)이면 `propose_revocation`, 아니면 `observe` | 구현. `npm run detect:test` 6항목·`npm run test:detect` 통과(가상 사건 연습이며 심판 통과 증거가 아님). **운영 반 엔진의 사건 전달과 실제 접속 회수는 연결하지 않음(미실행)** |
 | 10 | 안전 정책 사본(`policy/safe-policy.json`)+해시, 규칙 한 줄을 바꾼 시험 정책(침공 흉내)과 검증한 버전으로의 복원 절차, 메모 한 건 복원 API `POST /api/restore/notes` | 구현. `npm run test:policy`·`npm run test:restore` 통과(가상 요청·가짜 표 기준이며 심판 통과 증거가 아님). 배포된 복원 API를 B 로그인으로 호출한 결과는 사용자가 직접 실행해 알려 줌(복원 응답 `restored: true`, 다시 요청 `409`, B가 읽기 `200`; 캡처는 받지 못함). **A로 같은 복원을 요청해 `404`가 나오는지는 미실행** |
+| 11 | 설치형 웹앱(manifest·아이콘·오프라인 안내 서비스 워커)과 기기 승인: 서버가 이 기기를 승인된 기기로 확인한 뒤에만 화면이 메모를 불러옴. 승인은 같은 계정의 비밀번호를 서버가 다시 확인해야 함 | 구현. `npm run test:device`(가짜 표 13항목) 통과(심판 통과 증거가 아님). **배포 후 실제 승인(로그인·비밀번호)과 설치는 미실행**(Supabase에 `supabase/device-approvals.sql` 실행이 먼저 필요) |
 
 ## 현재 기능
 
@@ -35,6 +36,7 @@
 - 판정기(`src/decider.mjs`): 규칙 세 개. `device_registered`는 요청의 `deviceRegistered`가 `true`인 기기만 통과시키고 아니면 `deny`·`device_not_registered`입니다. `resource_zone`은 허용 목록에 없는 구역·경로·메서드를 `deny`·`resource_not_allowed`로 거부합니다(8단계 절). `step_up_required`는 복합 이상 사건을 `step_up`으로 보냅니다(7단계 절). 요청 이름은 `docs/DECIDER_REQUEST.md`의 것만 읽고 역할·`identity`·`device` 같은 필드는 읽지 않습니다.
 - 탐지(`src/detect.mjs`): `detect(events)`가 가상 조회 사건에서 폭주를 찾아 `{ action: 'propose_revocation', reasonCode: 'burst_read', subject }` 또는 `{ action: 'observe' }`만 돌려줍니다(9단계 절). 접속을 실제로 회수하지는 않습니다.
 - 안전 정책·복원(`src/policy-snapshot.mjs`, `src/policy-files.mjs`, `scripts/policy.mjs`, `src/restore-api.mjs`): 10단계 절을 보세요.
+- 설치형 웹앱·기기 승인(`public/manifest.webmanifest`, `public/sw.js`, `public/offline.html`, `src/device-api.mjs`, `api/device.js`): 11단계 절을 보세요.
 
 ## 다시 실행하는 방법
 
@@ -264,6 +266,45 @@
 - 복원 API는 `allowedRoutes`와 판정기 구역 규칙에 넣지 않았습니다(복원은 운영 보조 경로). 판정기를 거치지 않습니다.
 - 백업은 사람이 SQL로 만든 한 건뿐이며 자동 백업이 아닙니다. 백업 표와 `notes`가 같은 DB에 있어, DB 전체가 사라지면 복원할 수 없습니다.
 - 복원 API를 배포 후 B로 실제 호출한 결과는 사용자가 직접 실행해 전해 주었습니다(복원 `restored: true`, 같은 요청 반복 시 `409 ALREADY_EXISTS`, B가 읽기 `200`). A로 호출했을 때 `404`가 나오는지는 **미실행**입니다. 이전에 지워진 메모의 최신 수정본이 아니라 백업 시점의 내용을 되살립니다.
+
+## 11단계: 나만의 접속 앱
+
+**운영 정책(`src/decider.mjs`의 규칙 세 개와 응답 형식)은 바꾸지 않았습니다.** 판정기의 `deviceRegistered`는 운영 엔진이 정하는 값이라, 아래 기기 승인 기록과 연결하지도 값을 보내지도 않습니다. 기기 승인은 이 자료실 서버의 자체 기록입니다.
+
+### 제작 1: 설치형 웹앱 설정과 승인 상태 표시
+
+- `public/manifest.webmanifest`: 앱 이름 "BYTE BACK 내 자료실"(짧은 이름 "내 자료실"), 시작 주소 `/`, `display: standalone`, 아이콘 192·512 PNG(`public/icon-*.png`). 키·토큰·비밀번호는 넣지 않았습니다.
+- `public/sw.js`(서비스 워커): **오프라인 안내 페이지(`/offline.html`) 하나만** 보관합니다. 화면 이동이 네트워크 오류로 실패할 때만 그 안내를 보여 주고, `/api` 요청·로그인·메모는 가로채지도 저장하지도 않습니다.
+- 오프라인 안내(화면과 `offline.html`): "오프라인이면 메모는 보이지 않고 안내 화면만 열립니다. 이 기기에는 메모를 저장해 두지 않습니다. 앱으로 설치했다는 표시만으로는 기기를 믿지 않으며, 승인은 서버가 확인합니다."
+- 화면(`public/index.html`)의 "기기 승인 상태" 표시: 승인 필요 / 승인 대기 / 요청 만료 / 승인됨. 설치했다는 사실은 승인 상태에 아무 영향이 없습니다. 따로 설치하는 접속 프로그램은 만들지 않았습니다.
+
+### 제작 2: 기기 승인 요청과 서버 확인
+
+`GET·POST /api/device`(로그인 필요, `api/device.js`, 로직 `src/device-api.mjs`).
+
+1. 로그인하면 화면이 `GET /api/device`로 이 기기의 상태를 묻습니다. 승인됨이 아니면 **메모를 불러오지 않고** 승인 요청 버튼만 보입니다.
+2. "이 기기 승인 요청" → `POST {action:'request'}`: 서버가 무작위 기기 값(32바이트)을 만들어 **`HttpOnly`·`Secure`·`SameSite=Strict` 쿠키**(`vault-device`, 경로 `/api`)로 내려 주고, DB에는 그 **SHA-256 해시와 계정 ID**만 `pending`으로 저장합니다. 기기 값 원문은 화면 스크립트가 읽을 수 없고 `localStorage`·`sessionStorage`에도 넣지 않습니다.
+3. "이 기기 승인" → `POST {action:'approve', password}`: 서버가 이 로그인 토큰의 계정 이메일과 보낸 비밀번호로 **Supabase에 다시 로그인해 보고**, 확인된 사용자가 이 로그인의 사용자와 같을 때만 `approved`로 바꿉니다. 승인 버튼만 눌러서는 승인되지 않습니다(비밀번호 없음 → 400, 틀림 → 403).
+4. 승인 요청은 15분이 지나면 만료됩니다. 한 계정의 대기 요청은 5건까지입니다(만료된 것은 세지 않음). 본문의 `status`·`userId`·`deviceId`·`role` 같은 값은 403으로 거부합니다.
+5. 기기 기록은 계정에 묶입니다. A가 승인한 기기에서 B로 로그인하면 승인되지 않은 기기로 봅니다.
+6. 로그에는 비밀번호·기기 값·토큰·사용자 ID를 남기지 않고 사건 이름과 상태 번호만 남깁니다.
+
+DB 표는 `supabase/device-approvals.sql`(Git 제외, 이 컴퓨터에만 있음)로 만듭니다. RLS를 켜고 `anon`·`authenticated` 권한을 모두 회수하며 서버 전용 키만 읽고 씁니다.
+
+### 확인
+
+1. `npm run test:device`: 가짜 표로 승인 흐름(요청·재확인·만료·다른 계정·위조 쿠키·한도·로그)과 앱 설정 파일(manifest·서비스 워커·화면)을 확인합니다.
+2. 직접 해 볼 순서(사람이): ① Supabase SQL Editor에서 `supabase/device-approvals.sql` 실행(확인 조회에서 `anon_select`·`auth_select`는 `false`, `service_select`는 `true`) → ② 배포 주소에 로그인하면 "승인 필요"이고 메모가 보이지 않음 → ③ "이 기기 승인 요청" → 비밀번호 입력 후 "이 기기 승인" → "승인됨"과 메모 표시 → ④ 브라우저 주소창의 설치 아이콘이나 메뉴의 "앱 설치"로 설치해도, 새 기기·새 브라우저에서는 다시 승인이 필요해야 함.
+
+### 한계
+
+- **서버 API 자체는 기기 승인으로 막지 않습니다.** 승인되지 않은 기기도 유효한 로그인 토큰만 있으면 `/api/notes`를 직접 부를 수 있습니다. 기기 승인으로 막는 것은 이 화면이 메모를 불러오는 것까지입니다. 기존 단계의 점검(심판의 호출 포함)이 깨지지 않게 메모 API에는 기기 조건을 넣지 않았습니다. 브라우저에서 버튼을 숨기는 것만으로 서버 접근이 차단된 것은 아닙니다.
+- 기기 쿠키를 가진 사람은 그 기기로 행세할 수 있습니다. 쿠키는 `HttpOnly`라 화면 스크립트가 읽을 수 없지만, 기기 안의 개인키로 서명하는 방식(WebAuthn 등)은 아닙니다. 승인은 비밀번호 재확인에 의존합니다.
+- 비밀번호 재확인은 로그인 시도 횟수 제한을 Supabase 기본 제한에 맡깁니다.
+- 승인 취소(회수)와 승인된 기기 목록 화면은 만들지 않았습니다. 승인을 지우려면 DB의 `device_approvals` 행을 직접 지워야 합니다.
+- 서비스 워커·설치는 브라우저마다 동작이 다르며, 실제 설치와 오프라인 화면은 **미실행**입니다. 아이콘은 단색 도형입니다.
+- Vercel 서버 함수는 이 단계에서 12개가 되어 무료 한도(12개)에 닿았습니다. 더 만들려면 합쳐야 합니다.
+- 실제 승인 흐름(로그인·비밀번호)은 **미실행**이고 가짜 표 시험으로만 확인했습니다.
 
 ## 가상 메모가 새 파일에 없는지 확인하는 절차
 

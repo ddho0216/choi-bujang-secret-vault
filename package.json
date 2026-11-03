@@ -22,7 +22,8 @@
     "test:detect": "node --test test/detect.test.mjs",
     "fixture:7": "node scripts/fixture-7.mjs",
     "xdr:run": "node scripts/xdr-run.mjs",
-    "test:restore": "node --test test/restore-api.test.mjs"
+    "test:restore": "node --test test/restore-api.test.mjs",
+    "test:device": "node --test test/device-api.test.mjs test/app-shell.test.mjs"
   },
   "engines": {
     "node": ">=22"

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { SUPABASE_PUBLISHABLE_KEY as PUBLISHABLE_KEY } from './supabase-public.mjs';
 
 export async function runAttackChecks(config) {
-  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10].includes(config.step)) {
+  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].includes(config.step)) {
     throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
   }
   let app;
@@ -64,10 +64,8 @@ export async function runAttackChecks(config) {
         observed: `비로그인 GET /api/notes ${result(list)}${Array.isArray(listBody) ? ', 목록이 돌아옴' : ''}` },
       { attackId: 'anonymous_note_create', expected: '로그인 없이 메모를 추가할 수 없어야 함',
         observed: `비로그인 POST /api/notes ${result(create)}` },
-      { attackId: 'anonymous_note_update', expected: '로그인 없이 메모를 수정할 수 없어야 함',
-        observed: `비로그인 PUT /api/notes/:id ${result(update)}` },
-      { attackId: 'anonymous_note_delete', expected: '로그인 없이 메모를 삭제할 수 없어야 함',
-        observed: `비로그인 DELETE /api/notes/:id ${result(remove)}` },
+      { attackId: 'anonymous_note_update_delete', expected: '로그인 없이 메모를 수정·삭제할 수 없어야 함',
+        observed: `비로그인 PUT /api/notes/:id ${result(update)}, 비로그인 DELETE /api/notes/:id ${result(remove)}` },
     ];
     if (config.step === 3) return attempts;
 
@@ -146,10 +144,8 @@ export async function runAttackChecks(config) {
         const instructorRead = await zone('GET', '/instructor/x', 'instructor', 'GET /instructor/:id');
         const shown = response => `${response.decision}/${response.reasonCode}`;
         attempts.push(
-          { attackId: 'anonymous_instructor_api', expected: '로그인 없이 강사 자료 경로를 부르면 401 JSON 으로 거부',
-            observed: `비로그인 GET /api/instructor/x ${refused(instructorApi)}` },
-          { attackId: 'anonymous_notice_write_api', expected: '로그인 없이 반 공지를 쓰려 하면 401 JSON 으로 거부',
-            observed: `비로그인 PUT /api/notices/x ${refused(noticeWriteApi)}` },
+          { attackId: 'anonymous_other_zone_api', expected: '로그인 없이 강사 자료 경로를 부르거나 반 공지를 쓰려 하면 401 JSON 으로 거부',
+            observed: `비로그인 GET /api/instructor/x ${refused(instructorApi)}, 비로그인 PUT /api/notices/x ${refused(noticeWriteApi)}` },
           { attackId: 'zone_rules_local', expected: '자기 메모 한 건 읽기는 allow, 메모 전체 목록·반 공지 쓰기·강사 자료는 deny와 resource_not_allowed',
             observed: `로컬 판정기 호출: GET /notes/:id → ${shown(memoReadResult)}, GET /notes → ${shown(memoList)}, POST /notices → ${shown(noticeWrite)}, GET /instructor/:id → ${shown(instructorRead)} (심판의 판정이 아님)` },
           { attackId: 'other_zone_authenticated_api', expected: '로그인한 사용자가 다른 구역 자료를 직접 API 로 요청하면 거부',
@@ -192,6 +188,23 @@ export async function runAttackChecks(config) {
           { attackId: 'policy_restore_local', expected: '검증한 안전 정책 사본의 해시가 맞고, 규칙을 바꾼 시험 정책을 복원하면 B의 A 자료 요청은 다시 거부되고 A의 정상 요청은 유지', observed },
           { attackId: 'memo_restore_live_user_run', expected: 'B의 메모 한 건을 배포된 POST /api/restore/notes 로 되살리고 B의 로그인으로 확인',
             observed: '이 점검은 요청하지 않음(로그인 토큰 필요). 사용자가 B로 직접 실행해 알려 준 결과: 복원 restored true, 같은 요청 반복 409, B가 읽기 200. A의 요청 404는 미실행' },
+        );
+      }
+      if (config.step >= 11) {
+        // 11단계: 로그인 없이 기기 승인 경로를 부르면 거부되어야 하고, 앱 설정(manifest)에는 키·토큰이 없어야 한다(실제 요청).
+        const isJson = res => (res.headers.get('content-type') ?? '').includes('json');
+        const deviceStatus = await anonymous('/api/device');
+        const deviceRequest = await anonymous('/api/device', { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ action: 'request' }) });
+        const manifest = await anonymous('/manifest.webmanifest');
+        const manifestText = manifest.ok ? await manifest.text() : '';
+        let manifestName = null;
+        try { manifestName = JSON.parse(manifestText)?.name ?? null; } catch { /* 형식이 맞지 않으면 이름 없음으로 본다 */ }
+        const refusedDevice = res => (res.status === 401 && isJson(res) ? '거부됨 (HTTP 401, JSON)' : `거부되지 않음 (HTTP ${res.status}${isJson(res) ? ', JSON' : ', JSON 아님'})`);
+        attempts.push(
+          { attackId: 'anonymous_device_api', expected: '로그인 없이 기기 승인 경로를 읽거나 승인 요청을 보내면 401 JSON 으로 거부, 앱 설정(manifest)에는 키 문자열이 없어야 함',
+            observed: `비로그인 GET /api/device ${refusedDevice(deviceStatus)}, 비로그인 POST /api/device ${refusedDevice(deviceRequest)}, manifest ${manifest.ok && manifestName ? 'HTTP 200 이름 있음' : `읽지 못함 (HTTP ${manifest.status})`}, manifest에 키 문자열 ${keyPattern.test(manifestText) ? '보임' : '보이지 않음'}` },
+          { attackId: 'device_approval_live_not_run', expected: '로그인한 사용자가 이 기기를 승인 요청하고 비밀번호를 다시 확인해 승인한 뒤 자료실이 열림',
+            observed: '미실행: 로그인과 비밀번호가 필요해 이 점검에서는 요청하지 않음. 로컬 시험(가짜 표)으로만 확인함' },
         );
       }
     }

@@ -4,6 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>BYTE BACK | 점령된 자료실</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#101a28">
+  <link rel="icon" href="/icon-192.png" type="image/png">
   <style>
     :root { color-scheme: dark; font-family: system-ui, sans-serif; }
     body { margin: 0; min-height: 100vh; background: #101a28; color: #ecf4ff; }
@@ -31,12 +34,17 @@
     .who { margin: 0 0 12px; font-size: 16px; }
     .composer { margin: 0 0 18px; padding: 18px; border: 1px solid #51667c; border-radius: 14px; background: #1a2a3d; }
     .composer h2 { margin: 0 0 12px; font-size: 18px; }
+    .device { margin: 0 0 18px; padding: 18px; border: 1px solid #51667c; border-radius: 14px; background: #1a2a3d; }
+    .device h2 { margin: 0 0 8px; font-size: 18px; }
+    .badge { display: inline-block; padding: 2px 10px; border-radius: 999px; background: #3a5068; font-size: 14px; font-weight: 700; }
+    .badge.ok { background: #8ad8df; color: #101a28; }
+    .badge.wait { background: #e0b95a; color: #101a28; }
     [hidden] { display: none !important; }
   </style>
 </head>
 <body>
   <main>
-    <div class="eyebrow">BYTE BACK · 3단계 로그인</div>
+    <div class="eyebrow">BYTE BACK · 내 자료실 앱</div>
     <h1>점령된 자료실</h1>
     <p>아래 기록은 모두 실습을 위해 만든 가상 자료입니다. 실제 개인정보를 넣지 마세요.</p>
     <div class="notice">로그인한 사용자만 메모를 읽고 쓸 수 있고, 서버가 로그인한 사용자와 메모 소유자를 비교해 내 메모만 허용합니다.</div>
@@ -56,6 +64,19 @@
         <button id="logout-button" type="button">로그아웃</button>
       </div>
       <p id="auth-error" class="error" role="alert" hidden></p>
+    </section>
+    <section id="device" class="device" hidden aria-labelledby="device-title">
+      <h2 id="device-title">기기 승인 상태: <span id="device-status" class="badge">확인 중</span></h2>
+      <p id="device-text">서버가 이 기기를 확인하는 중입니다.</p>
+      <button id="device-request" type="button" hidden>이 기기 승인 요청</button>
+      <form id="device-approve" hidden>
+        <label>비밀번호를 한 번 더 입력해 주세요 (서버가 같은 계정인지 다시 확인합니다)
+          <input id="device-password" type="password" autocomplete="current-password" required>
+        </label>
+        <button id="device-approve-button" type="submit">이 기기 승인</button>
+      </form>
+      <p id="device-error" class="error" role="alert" hidden></p>
+      <p id="offline-note">오프라인이면 메모는 보이지 않고 안내 화면만 열립니다. 이 기기에는 메모를 저장해 두지 않습니다. 앱으로 설치했다는 표시만으로는 기기를 믿지 않으며, 승인은 서버가 확인합니다.</p>
     </section>
     <section id="composer" class="composer" hidden aria-labelledby="composer-title">
       <h2 id="composer-title">메모 추가</h2>
@@ -210,18 +231,74 @@
       }
     }
 
+    // 기기 승인: 서버가 이 기기(HttpOnly 쿠키, 이 스크립트는 읽을 수 없음)를 이 계정의 승인된 기기로 확인한 뒤에만 메모를 보여 준다.
+    // 화면을 숨기고 보이는 것이 보안은 아니다. 승인 기록은 서버(/api/device)에 있고, 이 화면은 그 결과를 보여 줄 뿐이다.
+    const deviceError = $('#device-error');
+    const DEVICE_TEXT = {
+      none: ['승인 필요', '', '이 기기는 아직 승인되지 않았습니다. 승인하기 전에는 메모가 보이지 않습니다.'],
+      pending: ['승인 대기', 'wait', '비밀번호를 한 번 더 입력하면 서버가 같은 계정인지 확인한 뒤 이 기기를 승인합니다.'],
+      expired: ['요청 만료', '', '승인 요청이 만료되었습니다(15분). 다시 요청해 주세요.'],
+      approved: ['승인됨', 'ok', '서버가 이 기기를 승인된 기기로 확인했습니다.'],
+    };
+    const showDevice = status => {
+      const [label, tone, text] = DEVICE_TEXT[status] ?? DEVICE_TEXT.none;
+      const badge = $('#device-status');
+      badge.textContent = label;
+      badge.className = `badge ${tone}`;
+      $('#device-text').textContent = text;
+      $('#device-request').hidden = !(status === 'none' || status === 'expired');
+      $('#device-approve').hidden = status !== 'pending';
+      $('#composer').hidden = status !== 'approved';
+      if (status === 'approved') {
+        loadNotes();
+      } else {
+        setError(notesError, '');
+        renderEmpty('기기 승인을 마치면 내 가상 메모가 보입니다.');
+      }
+    };
+    async function checkDevice() {
+      setError(deviceError, '');
+      try {
+        const result = await api('/api/device');
+        showDevice(result?.status);
+      } catch (error) {
+        if (session) { showDevice('none'); setError(deviceError, `기기 상태를 확인하지 못했습니다: ${error.message}`); }
+      }
+    }
+    const deviceAction = async body => {
+      setError(deviceError, '');
+      try {
+        const result = await api('/api/device', { method: 'POST', body: JSON.stringify(body) });
+        showDevice(result?.status);
+      } catch (error) {
+        if (session) setError(deviceError, `승인하지 못했습니다: ${error.message}`);
+      }
+    };
+    $('#device-request').addEventListener('click', () => deviceAction({ action: 'request' }));
+    $('#device-approve').addEventListener('submit', async event => {
+      event.preventDefault();
+      const input = $('#device-password');
+      const password = input.value;
+      input.value = '';
+      await deviceAction({ action: 'approve', password });
+    });
+
     const showSession = next => {
       session = next;
       writeSession(next);
       form.hidden = Boolean(next);
       signedIn.hidden = !next;
-      $('#composer').hidden = !next;
+      $('#device').hidden = !next;
+      $('#composer').hidden = true;
       $('#auth-title').textContent = next ? '로그인됨' : '로그인';
       $('#account-email').textContent = next?.email ?? '';
       if (next) {
-        loadNotes();
+        showDevice('none');
+        $('#device-text').textContent = '서버가 이 기기를 확인하는 중입니다.';
+        checkDevice();
       } else {
         setError(notesError, '');
+        setError(deviceError, '');
         renderEmpty('로그인하면 내 가상 메모가 보입니다.');
       }
     };
@@ -284,6 +361,9 @@
         button.disabled = false;
       }
     });
+
+    // 서비스 워커는 오프라인 안내 화면 하나만 보관한다(자료·로그인·/api 는 저장하지 않는다).
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
 
     showSession(readSession());
   </script>
