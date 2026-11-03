@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import config from '../aleph.config.json' with { type: 'json' };
 import { SUPABASE_PUBLISHABLE_KEY } from './supabase-public.mjs';
+import { createOpsSummary } from './ops-api.mjs';
 import { createLoginVerifier } from './verify-login.mjs';
 
 // 11단계 기기 승인: GET /api/device (상태), POST /api/device { action: 'request' | 'approve', password? }
@@ -43,7 +44,7 @@ const readCookie = request => {
 const cookieHeader = id => `${COOKIE}=${id}; HttpOnly; Secure; SameSite=Strict; Path=/api; Max-Age=${60 * 60 * 24 * 90}`;
 const defaultLog = entry => console.warn(JSON.stringify(entry));
 
-export function createDeviceApi({ verifier, supabase, verifyPassword, now = () => Date.now(), newDeviceId = () => randomBytes(32).toString('hex'), log = defaultLog }) {
+export function createDeviceApi({ verifier, supabase, verifyPassword, ops = null, now = () => Date.now(), newDeviceId = () => randomBytes(32).toString('hex'), log = defaultLog }) {
   const table = () => supabase.from('device_approvals');
   const refuse = (response, status, error, reason) => {
     log({ event: 'device_deny', status, reason });
@@ -71,6 +72,8 @@ export function createDeviceApi({ verifier, supabase, verifyPassword, now = () =
       }
       if (request.method === 'GET') {
         const { row } = await current(request, user);
+        // 12단계: 서버 함수 한도 때문에 작전실 요약을 같은 함수에 붙였다(GET /api/device?view=ops).
+        if (ops && request.query?.view === 'ops') return send(response, 200, await ops({ request, user, deviceStatus: statusOf(row) }));
         return send(response, 200, { status: statusOf(row) });
       }
       if (request.method !== 'POST') {
@@ -140,6 +143,6 @@ export function deviceApiFromEnvironment(env = process.env) {
     const { data, error } = await anon.auth.signInWithPassword({ email: found.user.email, password });
     return error ? null : (data?.user?.id ?? null);
   };
-  cached = createDeviceApi({ verifier, supabase, verifyPassword });
+  cached = createDeviceApi({ verifier, supabase, verifyPassword, ops: createOpsSummary({ supabase }) });
   return cached;
 }

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { SUPABASE_PUBLISHABLE_KEY as PUBLISHABLE_KEY } from './supabase-public.mjs';
 
 export async function runAttackChecks(config) {
-  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].includes(config.step)) {
+  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].includes(config.step)) {
     throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
   }
   let app;
@@ -185,9 +185,8 @@ export async function runAttackChecks(config) {
           observed = `검증한 사본을 확인하지 못함: ${error?.message ?? error}`;
         }
         attempts.push(
-          { attackId: 'policy_restore_local', expected: '검증한 안전 정책 사본의 해시가 맞고, 규칙을 바꾼 시험 정책을 복원하면 B의 A 자료 요청은 다시 거부되고 A의 정상 요청은 유지', observed },
-          { attackId: 'memo_restore_live_user_run', expected: 'B의 메모 한 건을 배포된 POST /api/restore/notes 로 되살리고 B의 로그인으로 확인',
-            observed: '이 점검은 요청하지 않음(로그인 토큰 필요). 사용자가 B로 직접 실행해 알려 준 결과: 복원 restored true, 같은 요청 반복 409, B가 읽기 200. A의 요청 404는 미실행' },
+          { attackId: 'policy_and_memo_restore', expected: '검증한 안전 정책 사본의 해시가 맞고 규칙을 바꾼 시험 정책을 복원하면 B의 A 자료 요청은 다시 거부되고 A의 정상 요청은 유지, B의 메모 한 건을 POST /api/restore/notes 로 되살려 B의 로그인으로 확인',
+            observed: `${observed}. 메모 복원은 이 점검이 요청하지 않음(로그인 토큰 필요): 사용자가 B로 직접 실행해 알려 준 결과 복원 restored true, 같은 요청 반복 409, B가 읽기 200. A의 요청 404는 미실행` },
         );
       }
       if (config.step >= 11) {
@@ -202,9 +201,19 @@ export async function runAttackChecks(config) {
         const refusedDevice = res => (res.status === 401 && isJson(res) ? '거부됨 (HTTP 401, JSON)' : `거부되지 않음 (HTTP ${res.status}${isJson(res) ? ', JSON' : ', JSON 아님'})`);
         attempts.push(
           { attackId: 'anonymous_device_api', expected: '로그인 없이 기기 승인 경로를 읽거나 승인 요청을 보내면 401 JSON 으로 거부, 앱 설정(manifest)에는 키 문자열이 없어야 함',
-            observed: `비로그인 GET /api/device ${refusedDevice(deviceStatus)}, 비로그인 POST /api/device ${refusedDevice(deviceRequest)}, manifest ${manifest.ok && manifestName ? 'HTTP 200 이름 있음' : `읽지 못함 (HTTP ${manifest.status})`}, manifest에 키 문자열 ${keyPattern.test(manifestText) ? '보임' : '보이지 않음'}` },
-          { attackId: 'device_approval_live_user_run', expected: '로그인한 사용자가 이 기기를 승인 요청하고 비밀번호를 다시 확인해 승인한 뒤 자료실이 열림',
-            observed: '이 점검은 요청하지 않음(로그인·비밀번호 필요). 사용자가 직접 실행해 알려 준 결과: 승인됨, 메모 추가 칸과 메모 목록 표시. 새 브라우저 재승인·앱 설치·오프라인 화면은 미실행' },
+            observed: `비로그인 GET /api/device ${refusedDevice(deviceStatus)}, 비로그인 POST /api/device ${refusedDevice(deviceRequest)}, manifest ${manifest.ok && manifestName ? 'HTTP 200 이름 있음' : `읽지 못함 (HTTP ${manifest.status})`}, manifest에 키 문자열 ${keyPattern.test(manifestText) ? '보임' : '보이지 않음'}. 승인 후 자료실 열림은 이 점검이 요청하지 않음(로그인·비밀번호 필요): 사용자가 직접 실행해 알려 준 결과 승인됨, 메모 추가 칸과 메모 목록 표시. 새 브라우저 재승인·앱 설치·오프라인 화면은 미실행` },
+        );
+      }
+      if (config.step >= 12) {
+        // 12단계: 로그인 없이 작전실 요약을 부르면 거부되어야 하고 작전실 화면 파일은 열려야 한다(실제 요청).
+        const opsApi = await anonymous('/api/device?view=ops');
+        const opsPage = await anonymous('/ops.html');
+        const opsJson = (opsApi.headers.get('content-type') ?? '').includes('json');
+        attempts.push(
+          { attackId: 'anonymous_ops_api', expected: '로그인 없이 작전실 요약을 부르면 401 JSON 으로 거부, 작전실 화면 파일은 열림',
+            observed: `비로그인 GET /api/device?view=ops ${opsApi.status === 401 && opsJson ? '거부됨 (HTTP 401, JSON)' : `거부되지 않음 (HTTP ${opsApi.status}${opsJson ? ', JSON' : ', JSON 아님'})`}, GET /ops.html HTTP ${opsPage.status}` },
+          { attackId: 'ops_live_and_judge_suite_not_run', expected: '로그인한 사용자의 작전실 요약이 실측·미실행을 구분해 보여 주고, 심판의 41종 공격 방어 시험을 통과',
+            observed: '미실행: 로그인 토큰이 필요해 작전실 요약은 요청하지 않았고 로컬 시험(가짜 표)으로만 확인함. 41종 공격 방어 시험은 심판이 실행하는 것이라 이 저장소에서 실행하지 않았고 통과로 처리하지 않음' },
         );
       }
     }

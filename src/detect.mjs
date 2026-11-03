@@ -35,6 +35,8 @@ export function readEvents(events) {
 // 돌려주는 값은 두 가지뿐입니다: { action, reasonCode, subject } 또는 { action: 'observe' }.
 const WINDOW_MS = 10 * 60 * 1000;
 const BURST_LIMIT = 120;
+// 12단계 작전실이 규칙 기준값을 보여 주려고 내보낸다(판정에는 위 상수를 그대로 쓴다).
+export const BURST_READ_RULE = Object.freeze({ rule: 'burst_read', method: 'GET', windowSeconds: WINDOW_MS / 1000, overCount: BURST_LIMIT });
 
 export function detect(events) {
   const reads = readEvents(events).filter(item => item.method === 'GET').sort((a, b) => a.at - b.at);

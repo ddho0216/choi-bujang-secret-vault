@@ -17,6 +17,7 @@
 | 9 | 탐지 함수 `src/detect.mjs`: 사건에서 `at`·`method`·`identity.sub` 세 값만 읽고, 규칙 `burst_read`(같은 사용자의 `GET`이 어느 10분 구간에서든 120건 초과)이면 `propose_revocation`, 아니면 `observe` | 구현. `npm run detect:test` 6항목·`npm run test:detect` 통과(가상 사건 연습이며 심판 통과 증거가 아님). **운영 반 엔진의 사건 전달과 실제 접속 회수는 연결하지 않음(미실행)** |
 | 10 | 안전 정책 사본(`policy/safe-policy.json`)+해시, 규칙 한 줄을 바꾼 시험 정책(침공 흉내)과 검증한 버전으로의 복원 절차, 메모 한 건 복원 API `POST /api/restore/notes` | 구현. `npm run test:policy`·`npm run test:restore` 통과(가상 요청·가짜 표 기준이며 심판 통과 증거가 아님). 배포된 복원 API를 B 로그인으로 호출한 결과는 사용자가 직접 실행해 알려 줌(복원 응답 `restored: true`, 다시 요청 `409`, B가 읽기 `200`; 캡처는 받지 못함). **A로 같은 복원을 요청해 `404`가 나오는지는 미실행** |
 | 11 | 설치형 웹앱(manifest·아이콘·오프라인 안내 서비스 워커)과 기기 승인: 서버가 이 기기를 승인된 기기로 확인한 뒤에만 화면이 메모를 불러옴. 승인은 같은 계정의 비밀번호를 서버가 다시 확인해야 함 | 구현. `npm run test:device`(가짜 표 13항목) 통과(심판 통과 증거가 아님). 배포 후 실제 승인은 사용자가 직접 해 보고 "승인되고 메모 추가 칸과 메모 목록이 보인다"고 알려 줌(캡처는 받지 못함). **앱 설치·오프라인 화면, 새 브라우저에서 다시 승인이 필요한지는 미실행** |
+| 12 | 탈환 작전실 화면(`/ops.html`)과 요약(`GET /api/device?view=ops`): 판정기 규칙·탐지 규칙·복구 버전·내 건수를 서버가 직접 확인한 값(실측)으로, 탐지 사건·회수 상태는 연결하지 않은 것(미실행)으로 구분해 표시. 정상·금지 요청을 한 표로 만드는 절차(`npm run ops:table`)와 설치·실행·중지·복구·출처 안내 | 구현. `npm run test:ops` 통과(가짜 표·가짜 서버 기준이며 심판 통과 증거가 아님). **심판의 41종 공격 방어 시험은 실행하지 않음(미실행)**. 로그인한 작전실 화면 실제 확인은 사용자가 해야 함 |
 
 ## 현재 기능
 
@@ -37,6 +38,7 @@
 - 탐지(`src/detect.mjs`): `detect(events)`가 가상 조회 사건에서 폭주를 찾아 `{ action: 'propose_revocation', reasonCode: 'burst_read', subject }` 또는 `{ action: 'observe' }`만 돌려줍니다(9단계 절). 접속을 실제로 회수하지는 않습니다.
 - 안전 정책·복원(`src/policy-snapshot.mjs`, `src/policy-files.mjs`, `scripts/policy.mjs`, `src/restore-api.mjs`): 10단계 절을 보세요.
 - 설치형 웹앱·기기 승인(`public/manifest.webmanifest`, `public/sw.js`, `public/offline.html`, `src/device-api.mjs`, `api/device.js`): 11단계 절을 보세요.
+- 탈환 작전실(`public/ops.html`, `src/ops-api.mjs`, `scripts/ops-table.mjs`): 12단계 절을 보세요.
 
 ## 다시 실행하는 방법
 
@@ -305,6 +307,85 @@ DB 표는 `supabase/device-approvals.sql`(Git 제외, 이 컴퓨터에만 있음
 - 서비스 워커·설치는 브라우저마다 동작이 다르며, 실제 설치와 오프라인 화면은 **미실행**입니다. 아이콘은 단색 도형입니다.
 - Vercel 서버 함수는 이 단계에서 12개가 되어 무료 한도(12개)에 닿았습니다. 더 만들려면 합쳐야 합니다.
 - 실제 승인 흐름은 사용자가 배포 주소에서 직접 해 보았고 결과를 전해 주었습니다(승인됨, 메모 추가 칸과 메모 목록 표시). 새 기기·새 브라우저에서 다시 승인이 필요한지, 앱 설치, 오프라인 화면은 **미실행**입니다.
+
+## 12단계: 탈환 작전실
+
+**판정기 규칙·응답 형식은 바꾸지 않았습니다.** 화면의 성공 문구를 통과 근거로 쓰지 않습니다. 이 단계의 "통과"는 심판이 정하며, 여기 적은 확인은 모두 내 쪽 점검입니다.
+
+### 제작 1: 작전실 화면과 요약
+
+- 화면 `/ops.html`(로그인한 같은 탭에서 자료실의 "탈환 작전실 열기" 링크로 이동)은 `GET /api/device?view=ops`의 응답을 **그대로** 그립니다. 값을 화면에서 계산하거나 지어내지 않고, 문자열은 `textContent`로만 넣습니다. "서버 응답 그대로 보기"를 펼쳐 화면의 값과 대조할 수 있습니다.
+- 요약 API는 서버 함수 한도(12개) 때문에 새 함수를 만들지 않고 기기 승인 함수(`api/device.js`)에 `view=ops`로 붙였습니다. 로그인이 필요하며(없으면 `401`), 모르는 `view` 값은 기존 기기 상태 응답을 돌려줍니다.
+- 항목마다 구분이 붙습니다. **실측**은 서버가 이번 요청에서 직접 읽거나 계산한 값이고, **미실행**은 이 자료실에 연결하지 않았거나 실행하지 않은 것이라 값을 비워 둡니다(0으로 채우지 않음).
+
+| 항목 | 구분 | 값의 출처 |
+|---|---|---|
+| 판정기 규칙 | 실측 | `src/decider.mjs`의 `RULE_IDS` |
+| 탐지 규칙 | 실측 | `src/detect.mjs`의 `burst_read`(GET, 600초, 120건 초과) |
+| 탐지 사건 | **미실행** | 자료실 서버는 `detect()`를 호출하지 않고 사건 저장소도 없어 사건 수를 알 수 없음 |
+| 회수 상태 | **미실행** | 접속 회수는 연결하지 않음(`detect()`는 회수 제안만 돌려줌) |
+| 복구 버전 | 실측 | `policy/safe-policy.json`의 버전, 해시 앞 12자, 현재 코드·설정과 다른 곳의 수 |
+| 내 메모 건수·내 백업 건수 | 실측 | `notes`·`notes_backup` 표에서 내 계정 행만 센 건수(표를 읽지 못하면 미실행) |
+| 이 기기 승인 상태 | 실측 | `device_approvals` 표 |
+
+- 메모 제목·본문, 소유자 ID, 기기 값, 토큰은 응답에도 화면에도 없습니다(`test/ops-api.test.mjs`가 확인). 응답에는 요청 ID(서버가 만든 UUID), 호스팅 서비스의 요청 ID(`x-vercel-id`), 확인 시각이 들어 있습니다.
+- "화면의 수치와 서버 기록이 맞는지": 건수는 서버가 센 값을 그대로 보여 주며, 시험(가짜 표)에서 계정별 건수가 표의 행 수와 같은 것을 확인했습니다. 실제 DB 값과의 대조는 로그인해서 직접 해야 합니다(**미실행**).
+
+### 제작 2: 정상·금지 요청 실측 표 절차
+
+`npm run ops:table` (배포 주소가 아닌 곳을 보려면 환경변수 `OPS_BASE_URL`).
+
+1. 배포 주소에 **실제 요청**을 보내고(로그인 없이 보낼 수 있는 정상·금지 요청), 판정기·탐지 함수를 이 컴퓨터에서 직접 부릅니다.
+2. 표의 열은 단계, 구분(정상/금지), 요청, 기대 결과, 실제 결과, 요청 ID, 확인 시각, 상태, 일치입니다. 요청 ID는 배포 요청은 응답 머리 `x-vercel-id`(호스팅 서비스가 붙인 값), 로컬 호출은 판정 요청에 넣은 UUID입니다.
+3. 상태는 네 가지입니다: **실측(배포)**, **실측(로컬)**(심판의 판정이 아님), **사용자 보고**(사용자가 직접 해 보고 알려 준 결과, 캡처 없음, 이 절차가 다시 확인하지 않음), **미실행**. 미실행·사용자 보고는 일치로 세지 않고, 기대와 다른 실측이 하나라도 있으면 명령이 실패 코드로 끝납니다.
+4. 결과는 `artifacts/ops-table.md`(Git 제외)에 저장됩니다. 로그인 토큰이 필요한 요청(로그인한 A의 정상 요청, B의 A 자료 요청 등)과 **심판의 41종 공격 방어 시험은 실행하지 않고 미실행으로 남깁니다. 임의로 통과 처리하지 않습니다.**
+5. 표에는 토큰·키·메모 본문이 들어가지 않습니다(`npm run test:ops`가 확인).
+
+### 제작 3: 설치·실행·중지·복구 안내
+
+기준: 검사한 커밋은 `/aleph.json`의 `commit`과 `git log -1`로 확인합니다(이 파일이 자기 커밋 번호를 적을 수 없어서 적지 않았습니다).
+
+**출처 구분**
+
+| 구분 | 무엇 | 위치 |
+|---|---|---|
+| ALEPH SDP 엔진(제공, 이 저장소 밖) | 요청의 신원·기기·경로를 확인해 판정기에 전달하는 운영 엔진, 심판 접수 서버(`judgeIssuer`), 41종 공격 시험. 판정 요청의 `deviceRegistered`·`stepUp`·`recentEvents`·`signals` 값은 이 엔진이 정함 | 이 저장소에 없음. 요청·응답 계약은 `docs/DECIDER_REQUEST.md`가 설명 |
+| 시작 틀(제공) | `aleph.config.json` 뼈대, `docs/`, `scripts/`의 시험·묶음 도구, `src/verify-login.mjs`, `xdr/` 안내와 시험 자료, `package/` 양식, 미구현 뼈대 `api/ai.js`·`api/threat-intel.js`(지금도 `501`, 구현하지 않음) | 첫 커밋 `ce0237b` |
+| 학생 작성(AI 코딩 도구와 함께 작성) | 판정기 규칙 세 개(`src/decider.mjs`), 탐지 `burst_read`(`src/detect.mjs`), 메모·로그인·구역·복원·기기 승인·작전실 API와 화면, 안전 정책 도구(`scripts/policy.mjs`), 정상·금지 요청 표(`scripts/ops-table.mjs`), 보너스 xdr 대응 코드 | `src/`, `api/`, `public/`, `scripts/`, `xdr/` 일부, `test/` |
+
+비밀값(서버 전용 키, 비밀번호, 토큰)은 이 저장소 어디에도 없고, Vercel 환경변수에만 둡니다. 환경변수 이름은 `SUPABASE_URL`, `SUPABASE_SECRET_KEY`입니다(값을 받는 곳: Supabase 프로젝트 설정의 API 화면. 값은 직접 입력).
+
+**설치**
+1. Node 22 이상. `git clone <저장소>` → `npm install` (오류 없이 끝나야 함).
+2. Supabase 학습용 프로젝트를 만들고 아래 표를 만듭니다. **이 저장소에는 `supabase/` 폴더가 없습니다**(메모 문장이 들어 있어 Git에서 뺌). 처음 받는 사람은 SQL Editor에서 직접 만들어야 합니다.
+   - `public.notes(id uuid primary key default gen_random_uuid(), owner_id uuid, title text not null, content text not null, created_at timestamptz not null default now())` + RLS 켜기 + `PUBLIC`·`anon`·`authenticated` 권한 회수 + `service_role`에 SELECT·INSERT·UPDATE·DELETE.
+   - `public.notes_backup`(10단계)과 `public.device_approvals`(11단계)는 위 절의 열 이름대로 만들고 같은 방식으로 RLS를 켜고 `service_role`만 허용합니다.
+3. Supabase Authentication에서 시험 계정(A, B)을 만들고, `aleph.config.json`의 `identityProvider`·`originalApiUrl`·`publicAppUrl`을 내 프로젝트 값으로 맞춥니다. 공개용 키(publishable)는 `src/supabase-public.mjs`에 둡니다.
+4. 새 Vercel 프로젝트에 저장소를 연결하고 환경변수 두 개를 비밀 입력란에 직접 넣어 배포합니다(서버 함수 12개, Hobby 한도).
+
+**실행(확인)**: `/`에서 로그인 → 기기 승인 → 메모 → `/ops.html`. 로컬 확인은 `npm run test:policy`, `test:restore`, `test:device`, `test:ops`, `test:decider`, `test:notes`, `test:detect`, `decider:test`, `detect:test`, `ops:table`.
+
+**중지**
+- 서버 함수만 멈추기: Vercel 환경변수 `SUPABASE_SECRET_KEY`를 지우고 다시 배포하면 자료 API가 `500 SERVER_NOT_CONFIGURED`를 돌려줍니다(데이터는 그대로).
+- 특정 기기만 거두기: DB의 `device_approvals`에서 그 행을 지웁니다(화면에서 취소하는 기능은 없음).
+- 로그인 하나 끊기: 화면의 로그아웃(`/api/logout`).
+- 접속 회수 자동화는 연결하지 않았습니다(9단계, 미실행).
+
+**복구**
+- 규칙 복구: `npm run policy:restore`(미리보기) → `-- --apply`(10단계 절). 검증한 사본(`policy/safe-policy.json`)과 해시가 맞아야만 진행합니다.
+- 메모 한 건 복구: `POST /api/restore/notes`(10단계 절).
+- 코드 되돌리기: `git revert <커밋>`으로 새 커밋을 만들어 push합니다. `git reset --hard`는 쓰지 않습니다.
+
+**재현 순서(처음 받는 사람)**: 설치 1~4 → `/`에서 로그인 → 기기 승인 → 메모 추가 → `/ops.html`에서 실측·미실행 구분 확인 → `npm run ops:table`로 표 만들기 → 시험 명령 실행.
+
+### 한계
+
+- 작전실의 "탐지 사건"과 "회수 상태"는 값이 없습니다. 자료실이 탐지·회수를 실제 요청에 연결하지 않았기 때문이며, 지어낸 숫자를 넣지 않았습니다.
+- 작전실 요약은 로그인한 사용자 본인 계정의 건수만 봅니다. 운영자 전체 현황이 아닙니다.
+- 표 절차는 로그인 토큰이 필요한 요청을 보내지 않습니다(토큰을 다루지 않기 위해서). 그 줄은 미실행이거나 사용자 보고입니다.
+- 심판의 41종 공격 방어 시험은 실행하지 않았습니다. 이 저장소의 점검은 심판 판정이 아니며, 통과 여부를 알 수 없습니다.
+- 서버 함수는 12개로 한도에 닿아 있습니다.
+- 위 설치 절차는 새 Vercel 프로젝트에서 처음부터 따라 해 보지 않았습니다(**미실행**).
 
 ## 가상 메모가 새 파일에 없는지 확인하는 절차
 

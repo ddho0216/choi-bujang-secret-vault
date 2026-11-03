@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>탈환 작전실 | 내 자료실</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#101a28">
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; }
+    body { margin: 0; min-height: 100vh; background: #101a28; color: #ecf4ff; }
+    main { max-width: 860px; margin: 0 auto; padding: 36px 22px 64px; }
+    .eyebrow { color: #8ad8df; font-size: 14px; font-weight: 700; letter-spacing: .08em; }
+    h1 { margin: 12px 0; font-size: clamp(28px, 6vw, 40px); }
+    p { font-size: 16px; line-height: 1.7; color: #bfd0e5; }
+    a { color: #8ad8df; }
+    table { width: 100%; border-collapse: collapse; margin: 18px 0; }
+    th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid #3a5068; font-size: 15px; }
+    th { color: #8ad8df; font-size: 13px; }
+    .badge { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 13px; font-weight: 700; white-space: nowrap; }
+    .badge.verified { background: #8ad8df; color: #101a28; }
+    .badge.not_run { background: #e0b95a; color: #101a28; }
+    .note { color: #bfd0e5; font-size: 14px; margin-top: 4px; }
+    .meta { font-size: 14px; color: #bfd0e5; }
+    .error { color: #ffb3c0; }
+    pre { overflow: auto; padding: 12px; border: 1px solid #3a5068; border-radius: 10px; background: #1a2a3d; font-size: 13px; }
+    code { font-family: ui-monospace, Consolas, monospace; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="eyebrow">BYTE BACK · 12단계</div>
+    <h1>탈환 작전실</h1>
+    <p>판정기 규칙, 탐지 사건, 회수 상태, 복구 버전을 서버가 이번 요청에서 직접 확인한 값으로 보여 줍니다. <strong>실측</strong>은 서버가 읽거나 계산한 값이고, <strong>미실행</strong>은 이 자료실에 연결하지 않았거나 실행하지 않은 것이라 값을 지어내지 않습니다. 메모 제목·본문은 표시하지 않습니다.</p>
+    <p><a href="/">← 자료실로 돌아가기</a></p>
+    <p id="need-login" class="error" hidden>로그인한 탭이 필요합니다. 자료실에서 로그인한 뒤 같은 탭에서 이 화면을 열어 주세요.</p>
+    <p id="error" class="error" role="alert" hidden></p>
+    <div id="result" hidden>
+      <p class="meta">확인 시각 <strong id="checked-at"></strong> · 요청 ID <code id="request-id"></code> · 플랫폼 요청 ID <code id="platform-id"></code></p>
+      <table>
+        <thead><tr><th>항목</th><th>구분</th><th>서버가 확인한 값</th><th>출처</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <details>
+        <summary>서버 응답 그대로 보기(화면 값과 대조용)</summary>
+        <pre id="raw"></pre>
+      </details>
+    </div>
+  </main>
+  <script type="module">
+    // 이 화면은 서버 응답을 그대로 그린다. 값을 계산하거나 지어내지 않고, 문자열은 textContent 로만 넣는다.
+    const $ = selector => document.querySelector(selector);
+    const readToken = () => {
+      try {
+        const saved = JSON.parse(sessionStorage.getItem('vault-session'));
+        if (saved?.access_token && saved.expires_at * 1000 > Date.now()) return saved.access_token;
+      } catch {
+        // 저장소를 읽지 못하면 로그인하지 않은 것으로 본다.
+      }
+      return null;
+    };
+    const show = value => {
+      if (value === null || value === undefined) return '—';
+      if (typeof value !== 'object') return String(value);
+      return Object.entries(value).map(([key, inner]) => `${key}: ${Array.isArray(inner) ? inner.join(', ') : inner}`).join(' · ');
+    };
+    const cell = (text, className) => {
+      const element = document.createElement('td');
+      if (className) element.className = className;
+      element.textContent = text;
+      return element;
+    };
+    async function load() {
+      const token = readToken();
+      if (!token) { $('#need-login').hidden = false; return; }
+      try {
+        const response = await fetch('/api/device?view=ops', { cache: 'no-store', headers: { Authorization: `Bearer ${token}` } });
+        const data = await response.json().catch(() => null);
+        if (!response.ok || data?.schema !== 'aleph.ops.summary.v1') throw new Error(`요청이 거부되었습니다 (${response.status})`);
+        $('#checked-at').textContent = data.checkedAt;
+        $('#request-id').textContent = data.requestId;
+        $('#platform-id').textContent = data.platformRequestId ?? '없음';
+        const rows = data.items.map(item => {
+          const row = document.createElement('tr');
+          const label = cell(item.label);
+          const status = document.createElement('td');
+          const badge = document.createElement('span');
+          badge.className = `badge ${item.status}`;
+          badge.textContent = item.status === 'verified' ? '실측' : '미실행';
+          status.append(badge);
+          const value = cell(show(item.value));
+          if (item.note) {
+            const note = document.createElement('div');
+            note.className = 'note';
+            note.textContent = item.note;
+            value.append(note);
+          }
+          row.append(label, status, value, cell(item.source));
+          return row;
+        });
+        $('#rows').replaceChildren(...rows);
+        $('#raw').textContent = JSON.stringify(data, null, 2);
+        $('#result').hidden = false;
+      } catch (error) {
+        $('#error').textContent = `작전실 요약을 불러오지 못했습니다: ${error.message}`;
+        $('#error').hidden = false;
+      }
+    }
+    load();
+  </script>
+</body>
+</html>
