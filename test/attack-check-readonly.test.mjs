@@ -18,10 +18,19 @@ test('점검 코드는 GET·HEAD 요청만 보낸다(쓰기 요청이 필요한 
   };
   try {
     const attempts = await runAttackChecks(config);
-    assert.ok(seen.length >= 8, '실제 요청을 보낸다');
+    assert.ok(seen.length >= 7, '실제 요청을 보낸다');
     assert.ok(seen.every(method => ['GET', 'HEAD'].includes(method)), [...new Set(seen)].join(','));
-    const notRun = attempts.filter(attempt => attempt.observed === 'not_run').map(attempt => attempt.attackId);
-    assert.deepEqual(notRun.sort(), ['anon_data_api_delete', 'anonymous_note_create', 'anonymous_note_update_delete']);
+    // 실제로 보낸 GET 이 있는 점검은 HTTP 상태를 적고, 요청하지 않았거나 로컬 가상 시험뿐인 점검은 정확히 'not_run' 이다.
+    const withRequest = ['anonymous_static_data_read', 'anonymous_list_read', 'anon_data_api_read', 'screen_has_no_public_key', 'anonymous_other_zone_api', 'anonymous_device_api', 'anonymous_ops_api'];
+    for (const attempt of attempts) {
+      if (withRequest.includes(attempt.attackId)) {
+        assert.match(attempt.observed, /^GET \S+.* HTTP \d{3}/u, attempt.attackId);
+      } else {
+        assert.equal(attempt.observed, 'not_run', attempt.attackId);
+      }
+    }
+    assert.equal(attempts.filter(attempt => attempt.observed === 'not_run').length, attempts.length - withRequest.length);
+    assert.equal(seen.length, withRequest.length, '점검 항목마다 GET 요청 한 건이 대응한다');
     assert.ok(attempts.length <= 20);
     assert.equal(new Set(attempts.map(attempt => attempt.attackId)).size, attempts.length);
   } finally {
