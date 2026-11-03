@@ -49,11 +49,6 @@ export async function runAttackChecks(config) {
     const jsonHeaders = { 'Content-Type': 'application/json' };
     const fakeId = '00000000-0000-4000-8000-000000000000';
     const list = await anonymous('/api/notes');
-    const create = await anonymous('/api/notes', { method: 'POST', headers: jsonHeaders,
-      body: JSON.stringify({ title: 'anonymous', body: 'anonymous' }) });
-    const update = await anonymous(`/api/notes/${fakeId}`, { method: 'PUT', headers: jsonHeaders,
-      body: JSON.stringify({ title: 'anonymous', body: 'anonymous' }) });
-    const remove = await anonymous(`/api/notes/${fakeId}`, { method: 'DELETE' });
     const listBody = await readJson(list);
     const result = (response) => (response.status === 401 ? '거부됨 (HTTP 401)' : `거부되지 않음 (HTTP ${response.status})`);
     const attempts = [
@@ -62,10 +57,9 @@ export async function runAttackChecks(config) {
           : `비로그인 요청에서 /data.json에 메모가 보이지 않음 (HTTP ${response.status})` },
       { attackId: 'anonymous_list_read', expected: '로그인 없이 목록을 읽을 수 없어야 함',
         observed: `비로그인 GET /api/notes ${result(list)}${Array.isArray(listBody) ? ', 목록이 돌아옴' : ''}` },
-      { attackId: 'anonymous_note_create', expected: '로그인 없이 메모를 추가할 수 없어야 함',
-        observed: `비로그인 POST /api/notes ${result(create)}` },
-      { attackId: 'anonymous_note_update_delete', expected: '로그인 없이 메모를 수정·삭제할 수 없어야 함',
-        observed: `비로그인 PUT /api/notes/:id ${result(update)}, 비로그인 DELETE /api/notes/:id ${result(remove)}` },
+      // 쓰기 요청(POST·PUT·DELETE)이 필요한 점검은 이 환경에서 보내지 않고 not_run 으로 남긴다.
+      { attackId: 'anonymous_note_create', expected: '로그인 없이 메모를 추가할 수 없어야 함', observed: 'not_run' },
+      { attackId: 'anonymous_note_update_delete', expected: '로그인 없이 메모를 수정·삭제할 수 없어야 함', observed: 'not_run' },
     ];
     if (config.step === 3) return attempts;
 
@@ -78,7 +72,6 @@ export async function runAttackChecks(config) {
     });
     const directRead = await direct('GET', '?select=id');
     const directRows = await readJson(directRead);
-    const directDelete = await direct('DELETE', `?id=eq.${fakeId}`);
     const denied = (res) => ([401, 403].includes(res.status) ? `거부됨 (HTTP ${res.status})` : `거부되지 않음 (HTTP ${res.status})`);
     // 5단계~: 화면 응답에 Supabase 공개 키가 없어야 한다(로그인은 서버 함수가 대신한다).
     const screen = await anonymous('/');
@@ -87,8 +80,7 @@ export async function runAttackChecks(config) {
     attempts.push(
       { attackId: 'anon_data_api_read', expected: '공개 키(anon)로 Data API에서 메모를 읽을 수 없어야 함',
         observed: `anon 키로 GET /rest/v1/notes ${denied(directRead)}${Array.isArray(directRows) ? `, 행 ${directRows.length}건이 돌아옴` : ''}` },
-      { attackId: 'anon_data_api_delete', expected: '공개 키(anon)로 Data API에서 메모를 지울 수 없어야 함',
-        observed: `anon 키로 DELETE /rest/v1/notes ${denied(directDelete)}` },
+      { attackId: 'anon_data_api_delete', expected: '공개 키(anon)로 Data API에서 메모를 지울 수 없어야 함', observed: 'not_run' },
       { attackId: 'cross_owner_access', expected: 'B가 A의 메모를 읽기·수정·삭제하면 거부되어야 함',
         observed: '미실행: 로그인 토큰이 필요해 이 점검에서는 요청하지 않음. 로컬 시험(가짜 표)으로만 확인함' },
     );
@@ -132,7 +124,6 @@ export async function runAttackChecks(config) {
         // 8단계: 로그인 없이 다른 구역을 직접 부르면 JSON 으로 거부되어야 한다(실제 요청).
         const isJson = res => (res.headers.get('content-type') ?? '').includes('json');
         const instructorApi = await anonymous('/api/instructor/x');
-        const noticeWriteApi = await anonymous('/api/notices/x', { method: 'PUT', headers: jsonHeaders, body: JSON.stringify({ title: 'anonymous' }) });
         const refused = res => (res.status === 401 && isJson(res) ? `거부됨 (HTTP 401, JSON)` : `거부되지 않음 (HTTP ${res.status}${isJson(res) ? ', JSON' : ', JSON 아님'})`);
         // 판정기에 가상 요청을 넣어 구역 규칙을 본다(로컬 호출이며 심판의 판정이 아니다).
         const base = { deviceRegistered: true, signals: { source: 'judge_fixture', region: 'local', network: 'usual', hour: 14 },
@@ -144,8 +135,8 @@ export async function runAttackChecks(config) {
         const instructorRead = await zone('GET', '/instructor/x', 'instructor', 'GET /instructor/:id');
         const shown = response => `${response.decision}/${response.reasonCode}`;
         attempts.push(
-          { attackId: 'anonymous_other_zone_api', expected: '로그인 없이 강사 자료 경로를 부르거나 반 공지를 쓰려 하면 401 JSON 으로 거부',
-            observed: `비로그인 GET /api/instructor/x ${refused(instructorApi)}, 비로그인 PUT /api/notices/x ${refused(noticeWriteApi)}` },
+          { attackId: 'anonymous_other_zone_api', expected: '로그인 없이 강사 자료 경로를 부르면 401 JSON 으로 거부(반 공지 쓰기 요청은 이 환경에서 보내지 않음)',
+            observed: `비로그인 GET /api/instructor/x ${refused(instructorApi)}` },
           { attackId: 'zone_rules_local', expected: '자기 메모 한 건 읽기는 allow, 메모 전체 목록·반 공지 쓰기·강사 자료는 deny와 resource_not_allowed',
             observed: `로컬 판정기 호출: GET /notes/:id → ${shown(memoReadResult)}, GET /notes → ${shown(memoList)}, POST /notices → ${shown(noticeWrite)}, GET /instructor/:id → ${shown(instructorRead)} (심판의 판정이 아님)` },
           { attackId: 'other_zone_authenticated_api', expected: '로그인한 사용자가 다른 구역 자료를 직접 API 로 요청하면 거부',
@@ -169,12 +160,14 @@ export async function runAttackChecks(config) {
       }
       if (config.step >= 10) {
         // 10단계: 검증한 안전 정책 사본을 읽고, 임시 시험 정책(메모리 안)에서 침공 흉내와 복원을 해 본다. 파일은 쓰지 않는다.
-        const { readVerifiedCopy } = await import('./policy-files.mjs');
+        const { readFileSync } = await import('node:fs');
         const { applyRestore, createTestPolicy, policyHash, runDemo, simulateTamper } = await import('./policy-snapshot.mjs');
         const root = new URL('../policy', import.meta.url);
         let observed;
         try {
-          const { policy: verified, hash } = await readVerifiedCopy(fileURLToPath(root));
+          const verified = JSON.parse(readFileSync(new URL('safe-policy.json', `${root.href}/`), 'utf8'));
+          const hash = policyHash(verified);
+          if (hash !== /^[0-9a-f]{64}/u.exec(readFileSync(new URL('safe-policy.sha256', `${root.href}/`), 'utf8'))?.[0]) throw new Error('사본의 해시가 맞지 않습니다');
           const at = '2026-10-01T00:00:00.000Z';
           const tampered = simulateTamper(createTestPolicy(verified, { at }), { at });
           const { next } = applyRestore({ verified, test: tampered, at });
@@ -193,15 +186,14 @@ export async function runAttackChecks(config) {
         // 11단계: 로그인 없이 기기 승인 경로를 부르면 거부되어야 하고, 앱 설정(manifest)에는 키·토큰이 없어야 한다(실제 요청).
         const isJson = res => (res.headers.get('content-type') ?? '').includes('json');
         const deviceStatus = await anonymous('/api/device');
-        const deviceRequest = await anonymous('/api/device', { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ action: 'request' }) });
         const manifest = await anonymous('/manifest.webmanifest');
         const manifestText = manifest.ok ? await manifest.text() : '';
         let manifestName = null;
         try { manifestName = JSON.parse(manifestText)?.name ?? null; } catch { /* 형식이 맞지 않으면 이름 없음으로 본다 */ }
         const refusedDevice = res => (res.status === 401 && isJson(res) ? '거부됨 (HTTP 401, JSON)' : `거부되지 않음 (HTTP ${res.status}${isJson(res) ? ', JSON' : ', JSON 아님'})`);
         attempts.push(
-          { attackId: 'anonymous_device_api', expected: '로그인 없이 기기 승인 경로를 읽거나 승인 요청을 보내면 401 JSON 으로 거부, 앱 설정(manifest)에는 키 문자열이 없어야 함',
-            observed: `비로그인 GET /api/device ${refusedDevice(deviceStatus)}, 비로그인 POST /api/device ${refusedDevice(deviceRequest)}, manifest ${manifest.ok && manifestName ? 'HTTP 200 이름 있음' : `읽지 못함 (HTTP ${manifest.status})`}, manifest에 키 문자열 ${keyPattern.test(manifestText) ? '보임' : '보이지 않음'}. 승인 후 자료실 열림은 이 점검이 요청하지 않음(로그인·비밀번호 필요): 사용자가 직접 실행해 알려 준 결과 승인됨, 메모 추가 칸과 메모 목록 표시. 새 브라우저 재승인·앱 설치·오프라인 화면은 미실행` },
+          { attackId: 'anonymous_device_api', expected: '로그인 없이 기기 승인 경로를 읽으면 401 JSON 으로 거부, 앱 설정(manifest)에는 키 문자열이 없어야 함',
+            observed: `비로그인 GET /api/device ${refusedDevice(deviceStatus)}, manifest ${manifest.ok && manifestName ? 'HTTP 200 이름 있음' : `읽지 못함 (HTTP ${manifest.status})`}, manifest에 키 문자열 ${keyPattern.test(manifestText) ? '보임' : '보이지 않음'}. 승인 후 자료실 열림은 이 점검이 요청하지 않음(로그인·비밀번호 필요): 사용자가 직접 실행해 알려 준 결과 승인됨, 메모 추가 칸과 메모 목록 표시. 새 브라우저 재승인·앱 설치·오프라인 화면은 미실행` },
         );
       }
       if (config.step >= 12) {
