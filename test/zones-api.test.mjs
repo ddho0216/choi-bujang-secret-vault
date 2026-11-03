@@ -113,7 +113,7 @@ test('모든 응답에 자원 ID 가 붙고, 어떤 응답에도 자료 본문�
 const memo = () => {
   const supabase = fakeSupabase();
   const logs = [];
-  return { supabase, logs, handle: createNotesApi({ verifier, supabase, log: entry => logs.push(entry) }) };
+  return { supabase, logs, handle: createNotesApi({ verifier, supabase, deviceCheck: async () => 'approved', log: entry => logs.push(entry) }) };
 };
 
 test('본인 정상 요청은 그대로 된다(읽기·추가·수정·삭제)', async () => {

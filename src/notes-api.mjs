@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import config from '../aleph.config.json' with { type: 'json' };
 import { RESOURCE_ZONES } from './decider.mjs';
+import { createDeviceCheck } from './device-check.mjs';
 import { createLoginVerifier } from './verify-login.mjs';
 
 // 8단계: 요청마다 서버가 구별하는 자원 ID(memo:<id>, 목록·추가는 memo:*). 응답 머리 X-Resource-Id 로도 내보낸다.
@@ -40,7 +41,10 @@ const validNote = input => input && typeof input.title === 'string' && typeof in
 // (남의 메모가 있다는 사실도 알려 주지 않는다.)
 const bodyOwner = input => (Object.hasOwn(input, 'owner_id') ? input.owner_id
   : Object.hasOwn(input, 'ownerId') ? input.ownerId : undefined);
-export function createNotesApi({ verifier, supabase, log = defaultLog }) {
+// 11단계: 메모는 서버가 이 계정의 승인된 기기에서 온 요청임을 확인한 뒤에만 읽고 쓴다.
+// deviceCheck(request, user) 는 'approved' 를 돌려줄 때만 통과이고, 그 밖의 값(none·pending·expired·revoked)이나 확인 실패(던짐)나
+// deviceCheck 를 주지 않은 경우는 모두 자료를 읽기 전에 거부한다(확인할 수 없으면 거부).
+export function createNotesApi({ verifier, supabase, log = defaultLog, deviceCheck = null }) {
   const notes = () => supabase.from('notes');
   // 거부 응답과 사유 기록을 함께 한다. 응답에는 사유를 따로 싣지 않는다(남의 메모가 있다는 사실도 알리지 않기 위해서다).
   const refuse = (response, status, error, reason, resourceId) => {
@@ -116,6 +120,11 @@ export function createNotesApi({ verifier, supabase, log = defaultLog }) {
         response.setHeader('WWW-Authenticate', 'Bearer');
         return refuse(response, 401, 'UNAUTHENTICATED', 'no_valid_login', resourceId);
       }
+      let approval = null;
+      try { approval = deviceCheck ? await deviceCheck(request, user) : null; } catch { approval = null; }
+      if (approval !== 'approved') {
+        return refuse(response, 403, 'DEVICE_NOT_APPROVED', approval === null ? 'device_check_failed' : `device_${approval}`, resourceId);
+      }
       return id === undefined ? await collection(request, response, user, resourceId)
         : await item(request, response, id, user, resourceId);
     } catch {
@@ -143,6 +152,6 @@ export function notesApiFromEnvironment(env = process.env) {
   if (!url || !key) return null;
   const supabase = createClient(url, key, { auth: { persistSession: false } });
   const verifier = createLoginVerifier({ config, supabaseSecretKey: key });
-  cached = createNotesApi({ verifier, supabase });
+  cached = createNotesApi({ verifier, supabase, deviceCheck: createDeviceCheck({ supabase }) });
   return cached;
 }

@@ -43,10 +43,12 @@ test('화면은 manifest 를 잇고, 기기 값을 브라우저 저장소에 넣
   assert.match(html, /기기 승인 상태/u);
   assert.match(html, /오프라인이면 메모는 보이지 않고/u);
   assert.match(html, /앱으로 설치했다는 표시만으로는 기기를 믿지 않으며/u);
-  // 브라우저 저장소에 쓰는 곳은 로그인 세션 하나뿐이다(기기 값·승인 상태는 저장하지 않는다).
-  const storageUses = html.match(/(?:local|session)Storage\.[a-zA-Z]+\([^)]*\)/gu) ?? [];
-  assert.ok(storageUses.every(use => use.includes('SESSION_KEY')), storageUses.join(' | '));
-  assert.doesNotMatch(html, /localStorage|document\.cookie|indexedDB/u);
+  // 로그인 토큰은 메모리에만 둔다. 브라우저 저장소를 읽거나 쓰는 코드는 없고, 예전 값을 지우는 removeItem 한 줄만 있다.
+  const code = html.split('\n').filter(line => !line.trim().startsWith('//')).join('\n');
+  const storageUses = code.match(/(?:local|session)Storage\.[a-zA-Z]+\([^)]*\)/gu) ?? [];
+  assert.deepEqual(storageUses, ["sessionStorage.removeItem('vault-session')"]);
+  assert.doesNotMatch(code, /localStorage|document\.cookie|indexedDB|readSession|writeSession/u);
+  assert.doesNotMatch(code, /Storage\.(?:get|set)Item/u);
   // loadNotes 는 승인된 상태(showDevice('approved'))에서만 부른다.
   const calls = [...html.matchAll(/loadNotes\(\)/gu)].length;
   const approvedBranch = html.indexOf("if (status === 'approved') {\n        loadNotes();");

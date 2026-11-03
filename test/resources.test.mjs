@@ -44,7 +44,7 @@ test('모양이 이상한 경로는 자원으로 보지 않는다', () => {
 test('서버 API 는 요청마다 X-Resource-Id 를 붙인다(로그인하지 않은 요청과 거부된 요청도)', async () => {
   const verifier = async authorization => (authorization === 'Bearer ok' ? { userId: '11111111-1111-4111-8111-111111111111' } : null);
   const supabase = { from: () => ({ select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }), order: async () => ({ data: [], error: null }) }) }) }) };
-  const api = createNotesApi({ log: () => {}, verifier, supabase });
+  const api = createNotesApi({ log: () => {}, deviceCheck: async () => 'approved', verifier, supabase });
   const call = async (id, authorization) => {
     const response = { headers: {}, status(code) { this.code = code; return this; }, setHeader(name, value) { this.headers[name] = value; }, json() { return this; } };
     await api({ method: 'GET', headers: { authorization } }, response, id);

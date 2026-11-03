@@ -1,7 +1,8 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import config from '../aleph.config.json' with { type: 'json' };
 import { SUPABASE_PUBLISHABLE_KEY } from './supabase-public.mjs';
+import { DEVICE_COOKIE, deviceHash, lookupDevice, statusAt } from './device-check.mjs';
 import { createOpsSummary } from './ops-api.mjs';
 import { createLoginVerifier } from './verify-login.mjs';
 
@@ -9,16 +10,14 @@ import { createLoginVerifier } from './verify-login.mjs';
 // - 기기 값은 서버가 만든 무작위 값이며 HttpOnly 쿠키로만 가진다. 화면 스크립트와 브라우저 저장소(local/sessionStorage)에는 넣지 않는다.
 // - 서버에는 그 값의 SHA-256 만 저장한다. 승인은 같은 계정의 비밀번호를 서버가 다시 확인해야 하며 버튼만으로는 되지 않는다.
 // - 이 기록은 학생 서버의 것이다. 판정기의 deviceRegistered 는 운영 엔진이 정하므로 바꾸지도 보내지도 않는다.
-const COOKIE = 'vault-device';
-const DEVICE_ID = /^[0-9a-f]{64}$/u;
-const PENDING_MAX_AGE_MS = 15 * 60 * 1000;
+const COOKIE = DEVICE_COOKIE;
 const PENDING_MAX_PER_USER = 5;
 const PASSWORD_MAX = 1024;
 const FORBIDDEN_KEYS = ['role', 'roles', 'isInstructor', 'is_instructor', 'instructor', 'isAdmin', 'is_admin', 'admin',
   'user_id', 'userId', 'owner_id', 'ownerId', 'deviceId', 'device_id', 'status'];
 const hasForbiddenKey = input => Boolean(input) && typeof input === 'object' && FORBIDDEN_KEYS.some(key => Object.hasOwn(input, key));
 
-export const deviceHash = id => createHash('sha256').update(id, 'utf8').digest('hex');
+export { deviceHash };
 
 const send = (response, status, payload) => {
   response.setHeader('Cache-Control', 'no-store');
@@ -29,18 +28,6 @@ const readBody = request => {
   if (raw && typeof raw === 'object') return raw;
   try { return JSON.parse(raw); } catch { return null; }
 };
-const readCookie = request => {
-  const header = request.headers?.cookie;
-  if (typeof header !== 'string') return null;
-  for (const part of header.split(';')) {
-    const [name, ...rest] = part.trim().split('=');
-    if (name === COOKIE) {
-      const value = rest.join('=');
-      return DEVICE_ID.test(value) ? value : null;
-    }
-  }
-  return null;
-};
 const cookieHeader = id => `${COOKIE}=${id}; HttpOnly; Secure; SameSite=Strict; Path=/api; Max-Age=${60 * 60 * 24 * 90}`;
 const defaultLog = entry => console.warn(JSON.stringify(entry));
 
@@ -50,18 +37,10 @@ export function createDeviceApi({ verifier, supabase, verifyPassword, ops = null
     log({ event: 'device_deny', status, reason });
     return send(response, status, { error });
   };
-  const expired = row => row.status === 'pending' && now() - Date.parse(row.created_at) > PENDING_MAX_AGE_MS;
-
-  // 이 계정의 이 기기 기록. 쿠키가 없거나 다른 계정의 기기면 기록이 없는 것으로 본다.
-  async function current(request, user) {
-    const id = readCookie(request);
-    if (!id) return { id: null, row: null };
-    const { data, error } = await table().select('id, user_id, status, created_at, approved_at')
-      .eq('device_hash', deviceHash(id)).eq('user_id', user.userId).maybeSingle();
-    if (error) throw new Error('device_lookup_failed');
-    return { id, row: data ?? null };
-  }
-  const statusOf = row => (!row ? 'none' : expired(row) ? 'expired' : row.status);
+  const expired = row => statusAt(row, now()) === 'expired';
+  // 이 계정의 이 기기 기록(쿠키가 없거나 다른 계정의 기기면 기록 없음). 조회 로직은 메모 API 와 함께 쓰는 공용 모듈에 있다.
+  const current = (request, user) => lookupDevice(supabase, request, user);
+  const statusOf = row => statusAt(row, now());
 
   return async function handle(request, response) {
     try {

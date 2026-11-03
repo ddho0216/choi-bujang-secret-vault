@@ -124,5 +124,6 @@ test('작전실 화면은 서버 응답을 그대로 그리고 메모 본문을 
   assert.match(html, /\/api\/device\?view=ops/u);
   assert.match(html, /실측/u);
   assert.match(html, /미실행/u);
-  assert.doesNotMatch(html, /\/api\/notes|innerHTML|localStorage/u);
+  assert.doesNotMatch(html, /\/api\/notes|innerHTML|localStorage|sessionStorage/u);
+  assert.match(html, /\/api\/login/u, '이 화면이 직접 로그인한다(토큰을 저장소에서 가져오지 않는다)');
 });

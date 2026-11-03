@@ -133,7 +133,7 @@ test('정책 계산기는 실제 판정기·메모 API 와 같은 결과를 낸�
     return q;
   };
   const supabase = { from: () => ({ select: () => query([]) }) };
-  const asUser = id => createNotesApi({ log: () => {}, supabase, verifier: async () => ({ userId: id }) });
+  const asUser = id => createNotesApi({ log: () => {}, deviceCheck: async () => 'approved', supabase, verifier: async () => ({ userId: id }) });
   const get = async userId => {
     const response = { setHeader() {}, status(code) { this.code = code; return this; }, json() { return this; } };
     await asUser(userId)({ method: 'GET', headers: {} }, response, rows[0].id);

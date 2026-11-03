@@ -25,6 +25,10 @@
     .error { color: #ffb3c0; }
     pre { overflow: auto; padding: 12px; border: 1px solid #3a5068; border-radius: 10px; background: #1a2a3d; font-size: 13px; }
     code { font-family: ui-monospace, Consolas, monospace; }
+    .login { display: grid; gap: 10px; margin: 16px 0; padding: 16px; border: 1px solid #3a5068; border-radius: 12px; background: #1a2a3d; }
+    .login label { display: grid; gap: 4px; font-size: 14px; color: #bfd0e5; }
+    .login input { padding: 10px 12px; border: 1px solid #51667c; border-radius: 10px; background: #101a28; color: #ecf4ff; font-size: 16px; }
+    .login button { padding: 10px 14px; border: 0; border-radius: 10px; background: #8ad8df; color: #101a28; font-size: 16px; font-weight: 700; cursor: pointer; }
     [hidden] { display: none !important; }
   </style>
 </head>
@@ -34,7 +38,12 @@
     <h1>탈환 작전실</h1>
     <p>판정기 규칙, 탐지 사건, 회수 상태, 복구 버전을 서버가 이번 요청에서 직접 확인한 값으로 보여 줍니다. <strong>실측</strong>은 서버가 읽거나 계산한 값이고, <strong>미실행</strong>은 이 자료실에 연결하지 않았거나 실행하지 않은 것이라 값을 지어내지 않습니다. 메모 제목·본문은 표시하지 않습니다.</p>
     <p><a href="/">← 자료실로 돌아가기</a></p>
-    <p id="need-login" class="error" hidden>로그인한 탭이 필요합니다. 자료실에서 로그인한 뒤 같은 탭에서 이 화면을 열어 주세요.</p>
+    <form id="login" class="login">
+      <p>이 화면은 로그인 토큰을 브라우저 저장소에 두지 않으므로 여기서 직접 로그인합니다(새로고침하면 다시 로그인).</p>
+      <label>이메일 <input id="email" type="email" autocomplete="email" required></label>
+      <label>비밀번호 <input id="password" type="password" autocomplete="current-password" required></label>
+      <button id="login-button" type="submit">로그인하고 보기</button>
+    </form>
     <p id="error" class="error" role="alert" hidden></p>
     <div id="result" hidden>
       <p class="meta">확인 시각 <strong id="checked-at"></strong> · 요청 ID <code id="request-id"></code> · 플랫폼 요청 ID <code id="platform-id"></code></p>
@@ -51,15 +60,6 @@
   <script type="module">
     // 이 화면은 서버 응답을 그대로 그린다. 값을 계산하거나 지어내지 않고, 문자열은 textContent 로만 넣는다.
     const $ = selector => document.querySelector(selector);
-    const readToken = () => {
-      try {
-        const saved = JSON.parse(sessionStorage.getItem('vault-session'));
-        if (saved?.access_token && saved.expires_at * 1000 > Date.now()) return saved.access_token;
-      } catch {
-        // 저장소를 읽지 못하면 로그인하지 않은 것으로 본다.
-      }
-      return null;
-    };
     const show = value => {
       if (value === null || value === undefined) return '—';
       if (typeof value !== 'object') return String(value);
@@ -71,9 +71,9 @@
       element.textContent = text;
       return element;
     };
-    async function load() {
-      const token = readToken();
-      if (!token) { $('#need-login').hidden = false; return; }
+    // 토큰은 이 페이지의 메모리에만 둔다(브라우저 저장소에 저장하지 않는다).
+    async function load(token) {
+      $('#error').hidden = true;
       try {
         const response = await fetch('/api/device?view=ops', { cache: 'no-store', headers: { Authorization: `Bearer ${token}` } });
         const data = await response.json().catch(() => null);
@@ -102,12 +102,30 @@
         $('#rows').replaceChildren(...rows);
         $('#raw').textContent = JSON.stringify(data, null, 2);
         $('#result').hidden = false;
+        $('#login').hidden = true;
       } catch (error) {
         $('#error').textContent = `작전실 요약을 불러오지 못했습니다: ${error.message}`;
         $('#error').hidden = false;
       }
     }
-    load();
+    $('#login').addEventListener('submit', async event => {
+      event.preventDefault();
+      const button = $('#login-button');
+      button.disabled = true;
+      try {
+        const response = await fetch('/api/login', { method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: $('#email').value.trim(), password: $('#password').value }) });
+        const data = await response.json().catch(() => null);
+        $('#password').value = '';
+        if (!response.ok || !data?.access_token) throw new Error(data?.message ?? `로그인하지 못했습니다 (${response.status})`);
+        await load(data.access_token);
+      } catch (error) {
+        $('#error').textContent = `작전실 요약을 불러오지 못했습니다: ${error.message}`;
+        $('#error').hidden = false;
+      } finally {
+        button.disabled = false;
+      }
+    });
   </script>
 </body>
 </html>

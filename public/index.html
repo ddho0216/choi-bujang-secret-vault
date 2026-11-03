@@ -96,8 +96,10 @@
   </main>
   <script type="module">
     // 로그인·로그아웃은 서버 함수(/api/login, /api/logout)가 대신한다.
-    // 이 파일은 인증 서비스의 주소도 키도 모른다. 서버가 돌려준 토큰만 이 탭에 보관한다.
-    const SESSION_KEY = 'vault-session';
+    // 이 파일은 인증 서비스의 주소도 키도 모른다. 서버가 돌려준 토큰은 이 페이지의 메모리에만 둔다.
+    // 브라우저 저장소(sessionStorage·localStorage)에는 토큰을 저장하지도 복원하지도 않는다. 새로고침하면 다시 로그인한다.
+    // 예전 버전이 저장해 둔 값이 남아 있을 수 있어 시작할 때 한 번 지운다.
+    try { sessionStorage.removeItem('vault-session'); } catch { /* 저장소를 쓸 수 없어도 상관없다 */ }
     const $ = selector => document.querySelector(selector);
     const form = $('#login-form');
     const signedIn = $('#signed-in');
@@ -108,24 +110,6 @@
     const setError = (element, message) => {
       element.textContent = message;
       element.hidden = !message;
-    };
-
-    const readSession = () => {
-      try {
-        const saved = JSON.parse(sessionStorage.getItem(SESSION_KEY));
-        if (saved?.access_token && saved.expires_at * 1000 > Date.now()) return saved;
-      } catch {
-        // 저장소를 읽지 못하면 로그아웃 상태로 본다.
-      }
-      return null;
-    };
-    const writeSession = next => {
-      try {
-        if (next) sessionStorage.setItem(SESSION_KEY, JSON.stringify(next));
-        else sessionStorage.removeItem(SESSION_KEY);
-      } catch {
-        // 저장하지 못해도 새로고침하면 로그아웃되는 정도다.
-      }
     };
 
     let session = null;
@@ -286,7 +270,6 @@
 
     const showSession = next => {
       session = next;
-      writeSession(next);
       form.hidden = Boolean(next);
       signedIn.hidden = !next;
       $('#device').hidden = !next;
@@ -366,7 +349,7 @@
     // 서비스 워커는 오프라인 안내 화면 하나만 보관한다(자료·로그인·/api 는 저장하지 않는다).
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
 
-    showSession(readSession());
+    showSession(null);
   </script>
 </body>
 </html>

@@ -57,7 +57,7 @@ const verifier = async (authorization) => (authorization === 'Bearer test' ? cur
 let currentUser = A;
 
 test('로그인하지 않은 요청은 모든 메서드에서 401로 거부된다', async () => {
-  const api = createNotesApi({ log: () => {}, verifier, supabase: fakeSupabase() });
+  const api = createNotesApi({ log: () => {}, deviceCheck: async () => 'approved', verifier, supabase: fakeSupabase() });
   for (const [method, id] of [['GET'], ['POST'], ['GET', 'x'], ['PUT', 'x'], ['DELETE', 'x']]) {
     const response = await call(api, method, { id, user: null, body: { title: 't', body: 'b' } });
     assert.equal(response.code, 401, `${method} ${id ?? ''}`);
@@ -66,7 +66,7 @@ test('로그인하지 않은 요청은 모든 메서드에서 401로 거부된�
 
 test('A가 메모를 추가·조회·수정·삭제하고, 지운 뒤 GET은 404', async () => {
   const supabase = fakeSupabase();
-  const api = createNotesApi({ log: () => {}, verifier, supabase });
+  const api = createNotesApi({ log: () => {}, deviceCheck: async () => 'approved', verifier, supabase });
   currentUser = A;
   const created = await call(api, 'POST', { body: { title: '제목', body: '본문' } });
   assert.equal(created.code, 201);
@@ -86,7 +86,7 @@ test('A가 메모를 추가·조회·수정·삭제하고, 지운 뒤 GET은 404
 });
 
 test('클라이언트가 준 id를 쓰고, 중복 id와 잘못된 입력은 거부된다', async () => {
-  const api = createNotesApi({ log: () => {}, verifier, supabase: fakeSupabase() });
+  const api = createNotesApi({ log: () => {}, deviceCheck: async () => 'approved', verifier, supabase: fakeSupabase() });
   currentUser = A;
   const id = '33333333-3333-4333-8333-333333333333';
   assert.deepEqual((await call(api, 'POST', { body: { id, title: 't', body: 'b' } })).payload, { id });
@@ -99,7 +99,7 @@ test('클라이언트가 준 id를 쓰고, 중복 id와 잘못된 입력은 거�
 
 test('B는 A의 메모를 읽거나 고치거나 지울 수 없고, A의 메모는 그대로 남는다', async () => {
   const supabase = fakeSupabase();
-  const api = createNotesApi({ log: () => {}, verifier, supabase });
+  const api = createNotesApi({ log: () => {}, deviceCheck: async () => 'approved', verifier, supabase });
   currentUser = A;
   const { id } = (await call(api, 'POST', { body: { title: 'A의 메모', body: 'A' } })).payload;
 
@@ -117,7 +117,7 @@ test('B는 A의 메모를 읽거나 고치거나 지울 수 없고, A의 메모�
 });
 
 test('A와 B는 각자 자기 메모의 읽기·추가·수정·삭제를 유지한다', async () => {
-  const api = createNotesApi({ log: () => {}, verifier, supabase: fakeSupabase() });
+  const api = createNotesApi({ log: () => {}, deviceCheck: async () => 'approved', verifier, supabase: fakeSupabase() });
   for (const user of [A, B]) {
     currentUser = user;
     const { id } = (await call(api, 'POST', { body: { title: '내 메모', body: '본문' } })).payload;
@@ -131,7 +131,7 @@ test('A와 B는 각자 자기 메모의 읽기·추가·수정·삭제를 유지
 
 test('본문의 owner_id는 믿지 않는다: 추가는 확인된 ID로 저장, 수정에서 소유자 변경은 거부', async () => {
   const supabase = fakeSupabase();
-  const api = createNotesApi({ log: () => {}, verifier, supabase });
+  const api = createNotesApi({ log: () => {}, deviceCheck: async () => 'approved', verifier, supabase });
   currentUser = A;
   const created = await call(api, 'POST', { body: { title: 't', body: 'b', owner_id: B.userId } });
   assert.equal(created.code, 201);
