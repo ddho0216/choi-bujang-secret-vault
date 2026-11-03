@@ -231,6 +231,7 @@
 ### 제작 3: 메모 한 건 복원 (B의 가상 메모)
 
 - 복원할 메모(B 소유 가상 메모): ID `5b2d7f10-3c4e-4a6b-9d1e-0b5a7c9e1f20`, 제목 "B의 가상 메모 (복원 시험)".
+- 설정: `aleph.config.json`의 `restoreRoute`에 `"POST /api/restore/notes"`를 등록했습니다.
 - 서비스·경로: **`notes` 서비스의 `POST /api/restore/notes`**, 본문 `{"id": "<메모 UUID>"}`. 로그인(`Authorization: Bearer`)이 필요합니다(`api/restore/notes.js`, 로직은 `src/restore-api.mjs`).
 - 비공개 백업: 표 `public.notes_backup`(RLS 켜기, `anon`·`authenticated` 권한 없음, 서버 전용 키만 읽음). 백업 행에는 id·owner_id·제목·본문과 내용 해시(`id`·제목·본문의 정렬 JSON SHA-256)가 있습니다. 표와 시험 메모는 `supabase/notes-restore.sql`(Git 제외, 이 컴퓨터에만 있음)로 만듭니다.
 - 절차: ① 백업을 `id`와 `owner_id=로그인한 사용자`로 한 질의에 조회(남의 백업은 없는 백업과 같은 `404`) → ② ID·소유자·내용 해시 비교(해시가 다르면 `409 BACKUP_CORRUPT`) → ③ 같은 ID의 메모가 이미 있으면 덮어쓰지 않고 `409 ALREADY_EXISTS` → ④ 그 한 건만 `notes`에 넣기 → ⑤ 다시 읽어 ID·소유자·내용 해시를 비교하고, 다르면 방금 넣은 한 건만 지우고 `502`.
