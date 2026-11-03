@@ -1,6 +1,5 @@
 // The student changes this check as each stage adds an attack to the same app.
 // Never return tokens, private keys, real names, or note bodies.
-import { SUPABASE_PUBLISHABLE_KEY as PUBLISHABLE_KEY } from './supabase-public.mjs';
 
 export async function runAttackChecks(config) {
   if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].includes(config.step)) {
@@ -30,8 +29,8 @@ export async function runAttackChecks(config) {
     }
   };
 
-  // 요청이 실패하면 상태를 지어내지 않는다(응답 없음으로 둔다).
-  const response = await anonymousGet('/data.json').catch(() => null);
+  // 3단계부터는 제출 환경에서 요청을 보내지 않는다(아래 step >= 3 블록 설명). 1·2단계만 /data.json 을 읽는다.
+  const response = config.step <= 2 ? await anonymousGet('/data.json').catch(() => null) : null;
   const data = response ? await readJson(response) : null;
   const visible = data?.sampleMarker === config.sampleMarker && Array.isArray(data.notes)
     && data.notes.length > 0;
@@ -41,46 +40,26 @@ export async function runAttackChecks(config) {
   }
 
   if (config.step >= 3) {
-    // 3단계~: 제출 환경에서는 공개 HTTPS 주소로 GET 요청만 보낼 수 있다.
-    // - 실제로 보낸 GET 이 있는 점검은 그 응답의 HTTP 상태를 observed 에 적는다.
-    // - 요청하지 않았거나(쓰기 요청, 로그인 토큰이 필요한 요청) 이 컴퓨터의 로컬 가상 시험뿐인 점검은 observed 를 'not_run' 으로 둔다.
-    //   로컬 시험 결과는 README 와 npm run test:* 로 확인하며 이 제출 증거에는 실제 요청처럼 적지 않는다.
-    const get = (path, init = {}) => fetch(new URL(path, app), {
-      redirect: 'error', signal: AbortSignal.timeout(10000), ...init,
-    });
+    // 3단계~: 제출 기록(npm run bundle)은 심판이 기록한 실제 요청과 대조된다. 심판의 실행 기록에 남지 않는 요청은
+    // 증거가 될 수 없으므로, 이 점검 코드는 제출 환경에서 요청을 보내지 않고 모든 점검의 observed 를 'not_run' 으로 남긴다.
+    // 요청을 보내서 받은 HTTP 상태를 지어내지 않는다. 실제로 보낸 요청의 결과는 내 컴퓨터에서 npm run ops:table 로 만든
+    // 표(요청 ID·확인 시각 포함)와 README, 그리고 npm run test:* 로 확인한다.
     const notRun = (attackId, expected) => ({ attackId, expected, observed: 'not_run' });
-    // 실제로 받은 응답이 있을 때는 observed 에 받은 HTTP 상태만 적는다(예: 'HTTP 401'). 요청이 실패했으면 상태를 지어내지 않고 'not_run' 으로 남긴다.
-    const tryGet = (path) => get(path).catch(() => null);
-    const seen = (res) => (res ? `HTTP ${res.status}` : 'not_run');
-    const list = await tryGet('/api/notes');
     const attempts = [
-      { attackId: 'anonymous_static_data_read', expected: '/data.json에서 가상 메모가 보이지 않아야 함',
-        observed: seen(response) },
-      { attackId: 'anonymous_list_read', expected: '로그인 없이 목록을 읽을 수 없어야 함',
-        observed: seen(list) },
+      notRun('anonymous_static_data_read', '/data.json에서 가상 메모가 보이지 않아야 함'),
+      notRun('anonymous_list_read', '로그인 없이 목록을 읽을 수 없어야 함'),
       notRun('anonymous_note_create', '로그인 없이 메모를 추가할 수 없어야 함'),
       notRun('anonymous_note_update_delete', '로그인 없이 메모를 수정·삭제할 수 없어야 함'),
     ];
     if (config.step === 3) return attempts;
 
-    // 4단계~: 직접 Data API는 anon(공개용) 키로만 확인한다. 5단계부터는 aleph.config.json의 originalApiUrl을 그대로 쓴다.
-    const dataApi = new URL(config.originalApiUrl ?? new URL('/rest/v1/notes', new URL(config.identityProvider.issuer).origin));
-    const dataApiRead = Object.assign(new URL(dataApi), { search: '?select=id' });
-    const directRead = await fetch(dataApiRead, {
-      method: 'GET', headers: { apikey: PUBLISHABLE_KEY, Authorization: `Bearer ${PUBLISHABLE_KEY}` },
-      redirect: 'error', signal: AbortSignal.timeout(10000),
-    }).catch(() => null);
-    // 5단계~: 첫 화면 응답의 상태를 적는다(화면 응답에 키 문자열이 없는지는 npm run test:device·ops:table 로 따로 확인한다).
-    const screen = await tryGet('/');
     attempts.push(
-      { attackId: 'anon_data_api_read', expected: '공개 키(anon)로 Data API에서 메모를 읽을 수 없어야 함',
-        observed: seen(directRead) },
+      notRun('anon_data_api_read', '공개 키(anon)로 Data API에서 메모를 읽을 수 없어야 함'),
       notRun('anon_data_api_delete', '공개 키(anon)로 Data API에서 메모를 지울 수 없어야 함'),
       notRun('cross_owner_access', 'B가 A의 메모를 읽기·수정·삭제하면 거부되어야 함'),
     );
     if (config.step >= 5) {
-      attempts.push({ attackId: 'screen_has_no_public_key', expected: '첫 화면 응답에 Supabase 공개 키가 없어야 함',
-        observed: seen(screen) });
+      attempts.push(notRun('screen_has_no_public_key', '첫 화면 응답에 Supabase 공개 키가 없어야 함'));
     }
     if (config.step >= 6) {
       attempts.push(notRun('device_rule_local', '등록 기기의 가상 요청은 allow, 미등록 기기의 가상 요청은 deny와 device_not_registered'));
@@ -92,11 +71,8 @@ export async function runAttackChecks(config) {
       );
     }
     if (config.step >= 8) {
-      // 8단계: 로그인 없이 다른 구역을 직접 부르면 JSON 으로 거부되어야 한다(실제 요청).
-      const instructorApi = await tryGet('/api/instructor/x');
       attempts.push(
-        { attackId: 'anonymous_other_zone_api', expected: '로그인 없이 강사 자료 경로를 부르면 401 JSON 으로 거부',
-          observed: seen(instructorApi) },
+        notRun('anonymous_other_zone_api', '로그인 없이 강사 자료 경로를 부르면 401 JSON 으로 거부'),
         notRun('zone_rules_local', '자기 메모 한 건 읽기는 allow, 메모 전체 목록·반 공지 쓰기·강사 자료는 deny와 resource_not_allowed'),
         notRun('other_zone_authenticated_api', '로그인한 사용자가 다른 구역 자료를 직접 API 로 요청하면 거부'),
       );
@@ -111,17 +87,11 @@ export async function runAttackChecks(config) {
       attempts.push(notRun('policy_and_memo_restore', '안전 정책 사본 해시 확인과 복원 뒤 B의 A 자료 요청 거부, B의 메모 한 건 복원'));
     }
     if (config.step >= 11) {
-      // 11단계: 로그인 없이 기기 승인 경로를 읽으면 거부되어야 한다(실제 요청).
-      const deviceApi = await tryGet('/api/device');
-      attempts.push({ attackId: 'anonymous_device_api', expected: '로그인 없이 기기 승인 경로를 읽으면 401 JSON 으로 거부',
-        observed: seen(deviceApi) });
+      attempts.push(notRun('anonymous_device_api', '로그인 없이 기기 승인 경로를 읽으면 401 JSON 으로 거부'));
     }
     if (config.step >= 12) {
-      // 12단계: 로그인 없이 작전실 요약을 읽으면 거부되어야 한다(실제 요청).
-      const opsApi = await tryGet('/api/device?view=ops');
       attempts.push(
-        { attackId: 'anonymous_ops_api', expected: '로그인 없이 작전실 요약을 부르면 401 JSON 으로 거부',
-          observed: seen(opsApi) },
+        notRun('anonymous_ops_api', '로그인 없이 작전실 요약을 부르면 401 JSON 으로 거부'),
         notRun('ops_live_and_judge_suite_not_run', '로그인한 사용자의 작전실 요약이 실측·미실행을 구분해 보여 주고, 심판의 41종 공격 방어 시험을 통과'),
       );
     }
