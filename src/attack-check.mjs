@@ -203,8 +203,8 @@ export async function runAttackChecks(config) {
         attempts.push(
           { attackId: 'anonymous_device_api', expected: '로그인 없이 기기 승인 경로를 읽거나 승인 요청을 보내면 401 JSON 으로 거부, 앱 설정(manifest)에는 키 문자열이 없어야 함',
             observed: `비로그인 GET /api/device ${refusedDevice(deviceStatus)}, 비로그인 POST /api/device ${refusedDevice(deviceRequest)}, manifest ${manifest.ok && manifestName ? 'HTTP 200 이름 있음' : `읽지 못함 (HTTP ${manifest.status})`}, manifest에 키 문자열 ${keyPattern.test(manifestText) ? '보임' : '보이지 않음'}` },
-          { attackId: 'device_approval_live_not_run', expected: '로그인한 사용자가 이 기기를 승인 요청하고 비밀번호를 다시 확인해 승인한 뒤 자료실이 열림',
-            observed: '미실행: 로그인과 비밀번호가 필요해 이 점검에서는 요청하지 않음. 로컬 시험(가짜 표)으로만 확인함' },
+          { attackId: 'device_approval_live_user_run', expected: '로그인한 사용자가 이 기기를 승인 요청하고 비밀번호를 다시 확인해 승인한 뒤 자료실이 열림',
+            observed: '이 점검은 요청하지 않음(로그인·비밀번호 필요). 사용자가 직접 실행해 알려 준 결과: 승인됨, 메모 추가 칸과 메모 목록 표시. 새 브라우저 재승인·앱 설치·오프라인 화면은 미실행' },
         );
       }
     }
