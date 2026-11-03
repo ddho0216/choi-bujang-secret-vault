@@ -34,10 +34,19 @@ export function readSignals(request) {
 }
 
 // 기준값은 수업용 가정입니다. 실제 사용자의 평소 시각·네트워크 기록이 아닙니다.
-const UNUSUAL_HOUR = hour => hour <= 5 || hour >= 23; // 심야 23시~5시
+const UNUSUAL_FROM_HOUR = 23; // 심야 23시~5시
+const UNUSUAL_TO_HOUR = 5;
+const UNUSUAL_HOUR = hour => hour <= UNUSUAL_TO_HOUR || hour >= UNUSUAL_FROM_HOUR;
 const BURST_WINDOW_SECONDS = 300; // 최근 5분
 const BURST_THRESHOLD = 10; // 이 안의 사건 건수 합이 10 이상이면 갑자기 몰린 것
 const STEP_UP_MAX_AGE_SECONDS = 900; // 계약: 다시 확인한 나이는 0~900초
+// 10단계 안전 정책 사본이 읽는 기준값입니다(판정에는 위 상수를 그대로 씁니다).
+export const STEP_UP_POLICY = Object.freeze({
+  unusualHours: Object.freeze({ from: UNUSUAL_FROM_HOUR, to: UNUSUAL_TO_HOUR }),
+  burstWindowSeconds: BURST_WINDOW_SECONDS,
+  burstThreshold: BURST_THRESHOLD,
+  verifiedMaxAgeSeconds: STEP_UP_MAX_AGE_SECONDS,
+});
 
 // 엔진이 준 최근 사건(최대 12건) 가운데 최근 5분 안의 건수를 더합니다. 모양이 다른 항목은 건너뜁니다.
 function recentBurstCount(request) {
@@ -116,7 +125,7 @@ export function resourceFor(path) {
 //   판정 요청에는 역할이 없어서 강사의 공지 수정은 판정기가 아니라 서버의 관리 경로에서 처리합니다.
 // - 강사 자료: 판정기에서는 모두 거부합니다.
 // 쿼리는 읽지 않습니다(쿼리로 기능을 고르지 않습니다). :id 와 같은 깊이에 export 같은 기능 경로를 두지 않습니다.
-const ZONE_RULES = Object.freeze({
+export const ZONE_RULES = Object.freeze({
   memo: Object.freeze(['GET /notes/:id', 'PUT /notes/:id', 'DELETE /notes/:id']),
   class_notice: Object.freeze(['GET /notices', 'GET /notices/:id']),
   instructor_material: Object.freeze([]),

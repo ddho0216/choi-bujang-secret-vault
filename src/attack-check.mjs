@@ -1,10 +1,11 @@
 // The student changes this check as each stage adds an attack to the same app.
 // Never return tokens, private keys, real names, or note bodies.
 import { randomUUID } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import { SUPABASE_PUBLISHABLE_KEY as PUBLISHABLE_KEY } from './supabase-public.mjs';
 
 export async function runAttackChecks(config) {
-  if (![1, 2, 3, 4, 5, 6, 7, 8, 9].includes(config.step)) {
+  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10].includes(config.step)) {
     throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
   }
   let app;
@@ -123,10 +124,8 @@ export async function runAttackChecks(config) {
         const forged = await decide({ requestId: randomUUID(), ...unusual, headers: { 'x-network': 'usual', 'x-hour': '14' }, geo: { region: 'local' } });
         const shown = response => `${response.decision}/${response.reasonCode}`;
         attempts.push(
-          { attackId: 'composite_anomaly_local', expected: '복합 이상 가상 사건은 step_up과 step_up_required',
-            observed: `로컬 판정기 호출: 복합 이상 가상 사건 → ${shown(flagged)} (심판의 판정이 아님)` },
-          { attackId: 'step_up_cases_local', expected: '정상 가상 사건은 allow, 다시 확인한 복합 이상은 allow, 위조 헤더를 덧붙인 복합 이상은 그대로 step_up',
-            observed: `로컬 판정기 호출: 정상 → ${shown(ordinary)}, 다시 확인한 복합 이상 → ${shown(confirmed)}, 위조 헤더를 덧붙인 복합 이상 → ${shown(forged)} (심판의 판정이 아님)` },
+          { attackId: 'step_up_cases_local', expected: '복합 이상 가상 사건은 step_up과 step_up_required, 정상 가상 사건은 allow, 다시 확인한 복합 이상은 allow, 위조 헤더를 덧붙인 복합 이상은 그대로 step_up',
+            observed: `로컬 판정기 호출: 복합 이상 → ${shown(flagged)}, 정상 → ${shown(ordinary)}, 다시 확인한 복합 이상 → ${shown(confirmed)}, 위조 헤더를 덧붙인 복합 이상 → ${shown(forged)} (심판의 판정이 아님)` },
           { attackId: 'relogin_block_not_run', expected: '확인 전 자료를 막고 새 로그인 뒤 요청을 다시 판정',
             observed: '미실행: 엔진이 같은 로그인으로 다시 로그인한 시각을 검증하는 계약을 이 저장소에서 찾지 못했고, 자료실 서버가 판정기를 호출하지 않음' },
         );
@@ -170,6 +169,29 @@ export async function runAttackChecks(config) {
             observed: `로컬 탐지 호출: 120건 → ${seen(detect(reads(120)))}, 121건 → ${seen(detect(reads(121)))}, 200건 → ${seen(detect(reads(200)))}, 두 사용자 각 100건 → ${seen(detect(two))} (가상 사건이며 심판의 판정이 아님)` },
           { attackId: 'revocation_not_run', expected: '운영 반 엔진이 검증한 사건을 전달하고 회수 제안을 집행',
             observed: '미실행: 운영 반 엔진의 사건 전달과 접속 회수는 연결·시험하지 않음. detect()는 회수 제안을 돌려줄 뿐 접속을 끊지 않음' },
+        );
+      }
+      if (config.step >= 10) {
+        // 10단계: 검증한 안전 정책 사본을 읽고, 임시 시험 정책(메모리 안)에서 침공 흉내와 복원을 해 본다. 파일은 쓰지 않는다.
+        const { readVerifiedCopy } = await import('./policy-files.mjs');
+        const { applyRestore, createTestPolicy, policyHash, runDemo, simulateTamper } = await import('./policy-snapshot.mjs');
+        const root = new URL('../policy', import.meta.url);
+        let observed;
+        try {
+          const { policy: verified, hash } = await readVerifiedCopy(fileURLToPath(root));
+          const at = '2026-10-01T00:00:00.000Z';
+          const tampered = simulateTamper(createTestPolicy(verified, { at }), { at });
+          const { next } = applyRestore({ verified, test: tampered, at });
+          const blocked = results => results.filter(item => item.name.startsWith('B의')).every(item => !item.allow);
+          const normal = results => results.filter(item => item.name.startsWith('A의')).every(item => item.allow);
+          observed = `로컬 계산: 검증한 사본 해시 통과(${hash.slice(0, 12)}…), 침공 흉내 중 B의 A 자료 요청 ${blocked(runDemo(tampered)) ? '거부됨' : '허용됨'}, 복원 후 B의 A 자료 요청 ${blocked(runDemo(next)) ? '다시 거부됨' : '여전히 허용됨'}, A 정상 요청 ${normal(runDemo(next)) ? '유지됨' : '막힘'}, 복원 후 정책 해시 ${policyHash(next.services.notes) === policyHash(verified.services.notes) ? '메모 규칙이 사본과 같음' : '다름'} (실제 운영 정책·심판 판정이 아님)`;
+        } catch (error) {
+          observed = `검증한 사본을 확인하지 못함: ${error?.message ?? error}`;
+        }
+        attempts.push(
+          { attackId: 'policy_restore_local', expected: '검증한 안전 정책 사본의 해시가 맞고, 규칙을 바꾼 시험 정책을 복원하면 B의 A 자료 요청은 다시 거부되고 A의 정상 요청은 유지', observed },
+          { attackId: 'memo_restore_live_not_run', expected: 'B의 메모 한 건을 배포된 POST /api/restore/notes 로 되살리고 B의 로그인으로 확인',
+            observed: '미실행: B의 로그인 토큰과 Supabase에 백업 표(notes_backup)가 있어야 해서 이 점검에서는 요청하지 않음. 로컬 시험(가짜 표)으로만 확인함' },
         );
       }
     }

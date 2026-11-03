@@ -1,0 +1,94 @@
+{
+  "schema": "aleph.policy.snapshot.v1",
+  "version": "safe-1",
+  "ruleIds": [
+    "device_registered",
+    "resource_zone",
+    "step_up_required"
+  ],
+  "deviceRule": {
+    "requireRegistered": true
+  },
+  "stepUpRule": {
+    "unusualHours": {
+      "from": 23,
+      "to": 5
+    },
+    "burstWindowSeconds": 300,
+    "burstThreshold": 10,
+    "verifiedMaxAgeSeconds": 900
+  },
+  "services": {
+    "notes": {
+      "zoneRules": [
+        "GET /notes/:id",
+        "PUT /notes/:id",
+        "DELETE /notes/:id"
+      ],
+      "ownerCheck": true,
+      "roleClaimsRejected": true,
+      "ownerChangeRejected": true
+    },
+    "notices": {
+      "zoneRules": [
+        "GET /notices",
+        "GET /notices/:id"
+      ]
+    },
+    "instructor": {
+      "zoneRules": []
+    }
+  },
+  "allowedRoutes": [
+    "GET /api/notes/:id",
+    "PUT /api/notes/:id",
+    "DELETE /api/notes/:id"
+  ],
+  "db": {
+    "table": "public.notes",
+    "rowLevelSecurity": true,
+    "tableGrants": {
+      "anon": [],
+      "authenticated": [],
+      "public": [],
+      "service_role": [
+        "DELETE",
+        "INSERT",
+        "SELECT",
+        "UPDATE"
+      ]
+    },
+    "rlsPolicies": {
+      "notes_delete_own": {
+        "command": "DELETE",
+        "roles": [
+          "authenticated"
+        ],
+        "using": "auth.uid() = owner_id"
+      },
+      "notes_insert_own": {
+        "command": "INSERT",
+        "roles": [
+          "authenticated"
+        ],
+        "withCheck": "auth.uid() = owner_id"
+      },
+      "notes_select_own": {
+        "command": "SELECT",
+        "roles": [
+          "authenticated"
+        ],
+        "using": "auth.uid() = owner_id"
+      },
+      "notes_update_own": {
+        "command": "UPDATE",
+        "roles": [
+          "authenticated"
+        ],
+        "using": "auth.uid() = owner_id",
+        "withCheck": "auth.uid() = owner_id"
+      }
+    },
+    "source": "supabase/notes-permissions.sql, supabase/notes-revoke-direct.sql 의 적용 기록(운영 DB를 읽은 값이 아님)"
+  }
+}
