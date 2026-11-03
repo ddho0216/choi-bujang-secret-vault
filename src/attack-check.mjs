@@ -49,16 +49,15 @@ export async function runAttackChecks(config) {
       redirect: 'error', signal: AbortSignal.timeout(10000), ...init,
     });
     const notRun = (attackId, expected) => ({ attackId, expected, observed: 'not_run' });
-    // 실제로 받은 응답이 있을 때만 요청 주소와 HTTP 상태를 적는다. 요청이 실패했으면 상태를 지어내지 않고 not_run 으로 남긴다.
+    // 실제로 받은 응답이 있을 때는 observed 에 받은 HTTP 상태만 적는다(예: 'HTTP 401'). 요청이 실패했으면 상태를 지어내지 않고 'not_run' 으로 남긴다.
     const tryGet = (path) => get(path).catch(() => null);
-    const at = (path) => new URL(path, app).href;
-    const seen = (res, url) => (res ? `GET ${url} HTTP ${res.status}` : 'not_run');
+    const seen = (res) => (res ? `HTTP ${res.status}` : 'not_run');
     const list = await tryGet('/api/notes');
     const attempts = [
       { attackId: 'anonymous_static_data_read', expected: '/data.json에서 가상 메모가 보이지 않아야 함',
-        observed: `${seen(response, at('/data.json'))}${response && visible ? ', 가상 메모가 보임' : ''}` },
+        observed: seen(response) },
       { attackId: 'anonymous_list_read', expected: '로그인 없이 목록을 읽을 수 없어야 함',
-        observed: seen(list, at('/api/notes')) },
+        observed: seen(list) },
       notRun('anonymous_note_create', '로그인 없이 메모를 추가할 수 없어야 함'),
       notRun('anonymous_note_update_delete', '로그인 없이 메모를 수정·삭제할 수 없어야 함'),
     ];
@@ -71,19 +70,17 @@ export async function runAttackChecks(config) {
       method: 'GET', headers: { apikey: PUBLISHABLE_KEY, Authorization: `Bearer ${PUBLISHABLE_KEY}` },
       redirect: 'error', signal: AbortSignal.timeout(10000),
     }).catch(() => null);
-    // 5단계~: 화면 응답에 Supabase 공개 키가 없어야 한다(로그인은 서버 함수가 대신한다).
+    // 5단계~: 첫 화면 응답의 상태를 적는다(화면 응답에 키 문자열이 없는지는 npm run test:device·ops:table 로 따로 확인한다).
     const screen = await tryGet('/');
-    const screenText = screen?.ok ? await screen.text().catch(() => '') : '';
-    const keyPattern = /sb_publishable_|sb_secret_|eyJ[A-Za-z0-9_-]{12,}.eyJ/u;
     attempts.push(
       { attackId: 'anon_data_api_read', expected: '공개 키(anon)로 Data API에서 메모를 읽을 수 없어야 함',
-        observed: seen(directRead, dataApiRead.href) },
+        observed: seen(directRead) },
       notRun('anon_data_api_delete', '공개 키(anon)로 Data API에서 메모를 지울 수 없어야 함'),
       notRun('cross_owner_access', 'B가 A의 메모를 읽기·수정·삭제하면 거부되어야 함'),
     );
     if (config.step >= 5) {
       attempts.push({ attackId: 'screen_has_no_public_key', expected: '첫 화면 응답에 Supabase 공개 키가 없어야 함',
-        observed: `${seen(screen, at('/'))}${screen?.ok ? `, 키 문자열 ${keyPattern.test(screenText) ? '보임' : '보이지 않음'}` : ''}` });
+        observed: seen(screen) });
     }
     if (config.step >= 6) {
       attempts.push(notRun('device_rule_local', '등록 기기의 가상 요청은 allow, 미등록 기기의 가상 요청은 deny와 device_not_registered'));
@@ -99,7 +96,7 @@ export async function runAttackChecks(config) {
       const instructorApi = await tryGet('/api/instructor/x');
       attempts.push(
         { attackId: 'anonymous_other_zone_api', expected: '로그인 없이 강사 자료 경로를 부르면 401 JSON 으로 거부',
-          observed: seen(instructorApi, at('/api/instructor/x')) },
+          observed: seen(instructorApi) },
         notRun('zone_rules_local', '자기 메모 한 건 읽기는 allow, 메모 전체 목록·반 공지 쓰기·강사 자료는 deny와 resource_not_allowed'),
         notRun('other_zone_authenticated_api', '로그인한 사용자가 다른 구역 자료를 직접 API 로 요청하면 거부'),
       );
@@ -117,14 +114,14 @@ export async function runAttackChecks(config) {
       // 11단계: 로그인 없이 기기 승인 경로를 읽으면 거부되어야 한다(실제 요청).
       const deviceApi = await tryGet('/api/device');
       attempts.push({ attackId: 'anonymous_device_api', expected: '로그인 없이 기기 승인 경로를 읽으면 401 JSON 으로 거부',
-        observed: seen(deviceApi, at('/api/device')) });
+        observed: seen(deviceApi) });
     }
     if (config.step >= 12) {
       // 12단계: 로그인 없이 작전실 요약을 읽으면 거부되어야 한다(실제 요청).
       const opsApi = await tryGet('/api/device?view=ops');
       attempts.push(
         { attackId: 'anonymous_ops_api', expected: '로그인 없이 작전실 요약을 부르면 401 JSON 으로 거부',
-          observed: seen(opsApi, at('/api/device?view=ops')) },
+          observed: seen(opsApi) },
         notRun('ops_live_and_judge_suite_not_run', '로그인한 사용자의 작전실 요약이 실측·미실행을 구분해 보여 주고, 심판의 41종 공격 방어 시험을 통과'),
       );
     }

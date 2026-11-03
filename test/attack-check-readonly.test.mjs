@@ -24,7 +24,7 @@ test('점검 코드는 GET·HEAD 요청만 보낸다(쓰기 요청이 필요한 
     const withRequest = ['anonymous_static_data_read', 'anonymous_list_read', 'anon_data_api_read', 'screen_has_no_public_key', 'anonymous_other_zone_api', 'anonymous_device_api', 'anonymous_ops_api'];
     for (const attempt of attempts) {
       if (withRequest.includes(attempt.attackId)) {
-        assert.match(attempt.observed, /^GET \S+.* HTTP \d{3}/u, attempt.attackId);
+        assert.match(attempt.observed, /^HTTP \d{3}$/u, attempt.attackId);
       } else {
         assert.equal(attempt.observed, 'not_run', attempt.attackId);
       }
@@ -48,16 +48,16 @@ test('점검 코드가 불러오는 파일은 격리 환경에서 허용된 node
   }
 });
 
-test('실제 응답이 있는 점검은 요청 주소 전체와 HTTP 상태를 적고, 요청이 실패하면 상태를 지어내지 않고 not_run 이다', async () => {
+test('실제 응답이 있는 점검은 받은 HTTP 상태만(예: HTTP 404) 적고, 요청이 실패하면 상태를 지어내지 않고 not_run 이다', async () => {
   const config = JSON.parse(await readFile(join(root, 'aleph.config.json'), 'utf8'));
   const original = globalThis.fetch;
   try {
     globalThis.fetch = async () => new Response('x', { status: 404 });
     const answered = await runAttackChecks(config);
     const list = answered.find(attempt => attempt.attackId === 'anonymous_list_read');
-    assert.equal(list.observed, `GET ${new URL('/api/notes', config.publicAppUrl).href} HTTP 404`);
+    assert.equal(list.observed, 'HTTP 404');
     const dataApi = answered.find(attempt => attempt.attackId === 'anon_data_api_read');
-    assert.match(dataApi.observed, /^GET https:\/\/\S+\/rest\/v1\/notes\?select=id HTTP 404$/u);
+    assert.equal(dataApi.observed, 'HTTP 404');
 
     globalThis.fetch = async () => { throw new TypeError('network down'); };
     const failed = await runAttackChecks(config);
