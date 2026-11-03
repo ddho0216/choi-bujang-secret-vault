@@ -340,7 +340,7 @@ DB 표는 `supabase/device-approvals.sql`(Git 제외, 이 컴퓨터에만 있음
 3. 상태는 네 가지입니다: **실측(배포)**, **실측(로컬)**(심판의 판정이 아님), **사용자 보고**(사용자가 직접 해 보고 알려 준 결과, 캡처 없음, 이 절차가 다시 확인하지 않음), **미실행**. 미실행·사용자 보고는 일치로 세지 않고, 기대와 다른 실측이 하나라도 있으면 명령이 실패 코드로 끝납니다.
 4. 결과는 `artifacts/ops-table.md`(Git 제외)에 저장됩니다. 로그인 토큰이 필요한 요청(로그인한 A의 정상 요청, B의 A 자료 요청 등)과 **심판의 41종 공격 방어 시험은 실행하지 않고 미실행으로 남깁니다. 임의로 통과 처리하지 않습니다.**
 5. 표에는 토큰·키·메모 본문이 들어가지 않습니다(`npm run test:ops`가 확인).
-6. 제출 묶음(`npm run bundle`)의 점검 코드(`src/attack-check.mjs`)는 격리된 제출 환경에서 실행되므로 **GET·HEAD 요청만** 보내고 `node:` 모듈은 쓰지 않습니다. 점검 항목마다 규칙이 같습니다: 실제로 보낸 GET이 있으면 그 응답의 HTTP 상태를 `observed`에 적고(비로그인 `/data.json`·`/api/notes`·`/api/instructor/x`·`/api/device`·`/api/device?view=ops`, `anon` 키 Data API 읽기, 첫 화면), **쓰기 요청이 필요하거나 로그인 토큰이 필요하거나 이 컴퓨터의 로컬 가상 시험뿐인 점검은 `observed: 'not_run'`**으로 남깁니다(13개). 로컬 시험의 결과는 이 제출 증거가 아니라 `npm run test:*`로 확인합니다. 이 표 절차(`ops:table`)는 제출 환경과 별개로 내 컴퓨터에서 도는 도구입니다(`npm run test:bundle`이 확인).
+6. 제출 묶음(`npm run bundle`)의 점검 코드(`src/attack-check.mjs`)는 격리된 제출 환경에서 실행되므로 **GET·HEAD 요청만** 보내고 `node:` 모듈은 쓰지 않습니다. 점검 항목마다 규칙이 같습니다: 실제로 보낸 GET이 있으면 그 요청 주소 전체와 응답의 HTTP 상태를 `observed`에 적고(요청이 실패하면 상태를 지어내지 않고 `not_run`; 비로그인 `/data.json`·`/api/notes`·`/api/instructor/x`·`/api/device`·`/api/device?view=ops`, `anon` 키 Data API 읽기, 첫 화면), **쓰기 요청이 필요하거나 로그인 토큰이 필요하거나 이 컴퓨터의 로컬 가상 시험뿐인 점검은 `observed: 'not_run'`**으로 남깁니다(13개). 로컬 시험의 결과는 이 제출 증거가 아니라 `npm run test:*`로 확인합니다. 이 표 절차(`ops:table`)는 제출 환경과 별개로 내 컴퓨터에서 도는 도구입니다(`npm run test:bundle`이 확인).
 
 ### 제작 3: 설치·실행·중지·복구 안내
 

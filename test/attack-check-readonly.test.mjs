@@ -47,3 +47,22 @@ test('점검 코드가 불러오는 파일은 격리 환경에서 허용된 node
     for (const name of used) assert.ok(allowed.has(name), `${file} 이 ${name} 을 씁니다`);
   }
 });
+
+test('실제 응답이 있는 점검은 요청 주소 전체와 HTTP 상태를 적고, 요청이 실패하면 상태를 지어내지 않고 not_run 이다', async () => {
+  const config = JSON.parse(await readFile(join(root, 'aleph.config.json'), 'utf8'));
+  const original = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => new Response('x', { status: 404 });
+    const answered = await runAttackChecks(config);
+    const list = answered.find(attempt => attempt.attackId === 'anonymous_list_read');
+    assert.equal(list.observed, `GET ${new URL('/api/notes', config.publicAppUrl).href} HTTP 404`);
+    const dataApi = answered.find(attempt => attempt.attackId === 'anon_data_api_read');
+    assert.match(dataApi.observed, /^GET https:\/\/\S+\/rest\/v1\/notes\?select=id HTTP 404$/u);
+
+    globalThis.fetch = async () => { throw new TypeError('network down'); };
+    const failed = await runAttackChecks(config);
+    assert.ok(failed.every(attempt => attempt.observed === 'not_run'), '요청이 모두 실패하면 모든 점검이 not_run');
+  } finally {
+    globalThis.fetch = original;
+  }
+});
