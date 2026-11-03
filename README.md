@@ -15,7 +15,7 @@
 | 7 | 판정기에 규칙 `step_up_required` 추가: 평소와 다른 시각·처음 보는 네트워크·갑자기 몰린 사건이 함께 있으면 `step_up`(추가 확인), 다시 확인한 요청은 `allow`. 접속 정보는 엔진이 붙인 출처만 믿는 입력 검사 추가 | 구현. `npm run decider:test`(4항목)·`npm run fixture:7`·`npm run test:decider` 통과(가상 사건 연습이며 심판 통과 증거가 아님). **실제 재로그인 확인과 자료 차단은 미실행** |
 | 8 | 자원 구역(메모·반 공지·강사 자료)과 자원 ID. 판정기에 규칙 `resource_zone` 추가(메모는 자료 ID 하나를 고르는 경로만, 반 공지는 읽기만, 강사 자료와 알 수 없는 경로는 거부). 자료 API는 본문의 `role`을 믿지 않고 거부 사유를 기록하며, 다른 구역은 JSON으로 거부 | 구현. `npm run decider:test`·`npm run test:decider`·`npm run test:notes` 통과(가상 요청·가짜 표 기준이며 심판 통과 증거가 아님). 이 자료실에는 메모만 있어 공지·강사 자료는 데이터 없이 구역만 정의함. 로그인한 사용자의 다른 구역 직접 요청은 **미실행** |
 | 9 | 탐지 함수 `src/detect.mjs`: 사건에서 `at`·`method`·`identity.sub` 세 값만 읽고, 규칙 `burst_read`(같은 사용자의 `GET`이 어느 10분 구간에서든 120건 초과)이면 `propose_revocation`, 아니면 `observe` | 구현. `npm run detect:test` 6항목·`npm run test:detect` 통과(가상 사건 연습이며 심판 통과 증거가 아님). **운영 반 엔진의 사건 전달과 실제 접속 회수는 연결하지 않음(미실행)** |
-| 10 | 안전 정책 사본(`policy/safe-policy.json`)+해시, 규칙 한 줄을 바꾼 시험 정책(침공 흉내)과 검증한 버전으로의 복원 절차, 메모 한 건 복원 API `POST /api/restore/notes` | 구현. `npm run test:policy`·`npm run test:restore` 통과(가상 요청·가짜 표 기준이며 심판 통과 증거가 아님). **배포된 복원 API를 B 로그인으로 실제 호출하는 점검은 미실행**(Supabase에 `supabase/notes-restore.sql` 실행과 B 로그인이 필요) |
+| 10 | 안전 정책 사본(`policy/safe-policy.json`)+해시, 규칙 한 줄을 바꾼 시험 정책(침공 흉내)과 검증한 버전으로의 복원 절차, 메모 한 건 복원 API `POST /api/restore/notes` | 구현. `npm run test:policy`·`npm run test:restore` 통과(가상 요청·가짜 표 기준이며 심판 통과 증거가 아님). 배포된 복원 API를 B 로그인으로 호출한 결과는 사용자가 직접 실행해 알려 줌(복원 응답 `restored: true`, 다시 요청 `409`, B가 읽기 `200`; 캡처는 받지 못함). **A로 같은 복원을 요청해 `404`가 나오는지는 미실행** |
 
 ## 현재 기능
 
@@ -254,7 +254,7 @@
 | 7 | 8 | 자기 메모 한 건 | 메모 목록·공지 쓰기·강사 자료 deny | `npm run test:decider`, `npm run test:notes` | 로컬 실행. **로그인한 사용자의 다른 구역 직접 요청은 미실행** |
 | 8 | 9 | 120건은 observe | 121건 이상은 propose_revocation | `npm run detect:test`, `npm run test:detect` | 로컬 실행. **실제 접속 회수는 미실행** |
 | 9 | 10 | 복원 후 A의 정상 요청 | 복원 후 B의 A 자료 요청 거부 | `npm run policy:restore -- --apply`, `npm run test:policy` | 로컬 실행 |
-| 10 | 10 | B의 메모 한 건 복원 후 B에게만 보임 | A가 B의 백업 복원 요청 → 404 | `npm run test:restore`(가짜 표) | 가짜 표만, **배포된 복원 API는 미실행** |
+| 10 | 10 | B의 메모 한 건 복원 후 B에게만 보임 | A가 B의 백업 복원 요청 → 404 | `npm run test:restore`(가짜 표) | 가짜 표 + B 로그인 실제 호출(사용자 실행, 결과 전달). **A의 요청 404는 미실행** |
 
 ### 한계
 
@@ -262,7 +262,7 @@
 - 시험 정책은 파일일 뿐 실제 서버의 동작을 바꾸지 않습니다. 침공 흉내와 복원은 정책 계산기에서만 일어납니다.
 - 복원 API는 `allowedRoutes`와 판정기 구역 규칙에 넣지 않았습니다(복원은 운영 보조 경로). 판정기를 거치지 않습니다.
 - 백업은 사람이 SQL로 만든 한 건뿐이며 자동 백업이 아닙니다. 백업 표와 `notes`가 같은 DB에 있어, DB 전체가 사라지면 복원할 수 없습니다.
-- 복원 API의 배포 후 실제 호출은 하지 않았습니다(**미실행**). 이전에 지워진 메모의 최신 수정본이 아니라 백업 시점의 내용을 되살립니다.
+- 복원 API를 배포 후 B로 실제 호출한 결과는 사용자가 직접 실행해 전해 주었습니다(복원 `restored: true`, 같은 요청 반복 시 `409 ALREADY_EXISTS`, B가 읽기 `200`). A로 호출했을 때 `404`가 나오는지는 **미실행**입니다. 이전에 지워진 메모의 최신 수정본이 아니라 백업 시점의 내용을 되살립니다.
 
 ## 가상 메모가 새 파일에 없는지 확인하는 절차
 

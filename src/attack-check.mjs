@@ -190,8 +190,8 @@ export async function runAttackChecks(config) {
         }
         attempts.push(
           { attackId: 'policy_restore_local', expected: '검증한 안전 정책 사본의 해시가 맞고, 규칙을 바꾼 시험 정책을 복원하면 B의 A 자료 요청은 다시 거부되고 A의 정상 요청은 유지', observed },
-          { attackId: 'memo_restore_live_not_run', expected: 'B의 메모 한 건을 배포된 POST /api/restore/notes 로 되살리고 B의 로그인으로 확인',
-            observed: '미실행: B의 로그인 토큰과 Supabase에 백업 표(notes_backup)가 있어야 해서 이 점검에서는 요청하지 않음. 로컬 시험(가짜 표)으로만 확인함' },
+          { attackId: 'memo_restore_live_user_run', expected: 'B의 메모 한 건을 배포된 POST /api/restore/notes 로 되살리고 B의 로그인으로 확인',
+            observed: '이 점검은 요청하지 않음(로그인 토큰 필요). 사용자가 B로 직접 실행해 알려 준 결과: 복원 restored true, 같은 요청 반복 409, B가 읽기 200. A의 요청 404는 미실행' },
         );
       }
     }
