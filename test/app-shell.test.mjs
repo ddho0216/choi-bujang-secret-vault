@@ -5,9 +5,7 @@ import { test } from 'node:test';
 
 const root = join(import.meta.dirname, '..');
 // 저장소를 받는 환경에 따라 줄바꿈이 CRLF 일 수 있어 LF 로 맞춰 읽는다.
-const text = async path => (await readFile(join(root, path), 'utf8')).replace(/
-/gu, '
-');
+const text = async path => (await readFile(join(root, path), 'utf8')).split('\r\n').join('\n');
 
 test('manifest 는 앱 이름·시작 주소·아이콘을 갖고 키나 토큰이 없다', async () => {
   const raw = await text('public/manifest.webmanifest');
